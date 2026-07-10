@@ -1,22 +1,43 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.config import get_settings
 
 Role = Literal["system", "user", "assistant"]
 ProviderName = Literal["openai", "gemini"]
+MAX_MESSAGE_LENGTH = get_settings().max_message_length
 
 
 class ChatMessageSchema(BaseModel):
     role: Role
-    content: str
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("message content must not be blank")
+        return trimmed
 
 
 class ChatRequestSchema(BaseModel):
-    messages: list[ChatMessageSchema]
-    model: str | None = None
+    messages: list[ChatMessageSchema] = Field(min_length=1)
+    model: str | None = Field(default=None, min_length=1, max_length=120)
     provider: ProviderName | None = None
-    temperature: float = 0.7
+    temperature: float = Field(default=0.7, ge=0, le=2)
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("model must not be blank")
+        return trimmed
 
 
 class ChatResponseSchema(BaseModel):

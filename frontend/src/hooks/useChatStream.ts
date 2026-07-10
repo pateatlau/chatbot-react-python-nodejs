@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { streamChat } from '../api/chatClient'
+import { streamChat, toChatApiError } from '../api/chatClient'
 import { SseParser } from '../api/sseParser'
 import type { ChatChunk, ChatRequest } from '../types/chat'
 
@@ -27,8 +27,11 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
 
       try {
         const response = await streamChat(request, controller.signal)
-        if (!response.ok || !response.body) {
-          throw new Error(`Stream request failed: ${response.status}`)
+        if (!response.ok) {
+          throw await toChatApiError(response, `Stream request failed: ${response.status}`)
+        }
+        if (!response.body) {
+          throw new Error('Stream response did not include a body.')
         }
 
         const reader = response.body.getReader()
@@ -50,6 +53,7 @@ export function useChatStream(options: UseChatStreamOptions = {}) {
               options.onEnd?.(chunk)
             } else if (chunk.type === 'error') {
               options.onError?.(chunk)
+              return
             }
           }
         }

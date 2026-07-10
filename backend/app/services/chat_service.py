@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from typing import AsyncIterator
@@ -18,6 +19,56 @@ from app.schemas.chat import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ChatServiceError(Exception):
+    def __init__(self, code: str, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+
+class ProviderTimeoutError(ChatServiceError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="provider_timeout",
+            message="Upstream provider timed out.",
+            status_code=504,
+        )
+
+
+class ProviderRateLimitedError(ChatServiceError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="provider_rate_limited",
+            message="Upstream rate limit hit, please retry shortly.",
+            status_code=429,
+        )
+
+
+class ProviderError(ChatServiceError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="provider_error",
+            message="Upstream provider failed.",
+            status_code=502,
+        )
+
+
+def normalize_chat_error(exc: Exception) -> ChatServiceError:
+    if isinstance(exc, ChatServiceError):
+        return exc
+
+    error_name = exc.__class__.__name__.lower()
+    if isinstance(exc, TimeoutError) or "timeout" in error_name:
+        return ProviderTimeoutError()
+    if any(
+        token in error_name
+        for token in ("ratelimit", "too_many_requests", "toomanyrequests", "resourceexhausted")
+    ):
+        return ProviderRateLimitedError()
+    return ProviderError()
 
 
 def _format_sse(
@@ -45,11 +96,24 @@ class ChatService:
             return self._settings.gemini_model
         return self._settings.openai_model
 
+    async def _complete_with_timeout(
+        self,
+        provider: LLMProvider,
+        request: ChatRequestSchema,
+        model: str,
+    ) -> str:
+        return await asyncio.wait_for(
+            provider.complete_chat(request.messages, model, request.temperature),
+            timeout=self._settings.request_timeout_seconds,
+        )
+
     async def complete_chat(self, request: ChatRequestSchema) -> ChatResponseSchema:
         provider, model, provider_name = self._resolve_provider(request)
-        content = await provider.complete_chat(
-            request.messages, model, request.temperature
-        )
+        try:
+            content = await self._complete_with_timeout(provider, request, model)
+        except Exception as exc:  # noqa: BLE001 - normalize upstream/provider failures
+            raise normalize_chat_error(exc) from exc
+
         return ChatResponseSchema(
             id=f"resp_{uuid.uuid4().hex[:12]}",
             content=content,
@@ -71,15 +135,24 @@ class ChatService:
         yield _format_sse("start", StartFrame(id=response_id))
 
         try:
-            finish_reason = "stop"
-            async for chunk in provider.stream_chat(
+            provider_stream = provider.stream_chat(
                 request.messages, model, request.temperature
-            ):
+            ).__aiter__()
+            finish_reason = "stop"
+            while True:
                 if await http_request.is_disconnected():
                     logger.info(
                         "Client disconnected, stopping stream for %s", response_id
                     )
                     return
+
+                try:
+                    chunk = await asyncio.wait_for(
+                        anext(provider_stream),
+                        timeout=self._settings.request_timeout_seconds,
+                    )
+                except StopAsyncIteration:
+                    break
 
                 if chunk["content"]:
                     yield _format_sse(
@@ -94,8 +167,13 @@ class ChatService:
         except (
             Exception
         ) as exc:  # noqa: BLE001 - normalize any provider failure into an error frame
+            app_error = normalize_chat_error(exc)
             logger.exception("Provider stream failed for %s", response_id)
             yield _format_sse(
                 "error",
-                ErrorFrame(id=response_id, code="provider_error", message=str(exc)),
+                ErrorFrame(
+                    id=response_id,
+                    code=app_error.code,
+                    message=app_error.message,
+                ),
             )

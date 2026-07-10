@@ -18,8 +18,8 @@ Current status:
 
 ## Repository Structure
 
-- `backend/python/` - FastAPI reference backend
-- `backend/nodejs/` - Express + TypeScript parity backend
+- `backend-python/` - FastAPI reference backend
+- `backend-nodejs/` - Express + TypeScript parity backend
 - `frontend/` - React client with streaming UI
 - `docs/` - planning notes (ignored by git in this repo setup)
 
@@ -87,7 +87,7 @@ flowchart LR
 ### 1) Python Backend
 
 ```bash
-cd backend/python
+cd backend-python
 cp .env.example .env
 # Fill in API keys in .env
 uv sync
@@ -97,9 +97,9 @@ uv run uvicorn app.main:app --reload --port 8000
 ### 2) Node Backend
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 npm install
-# Create backend/nodejs/.env and fill in provider keys
+# Create backend-nodejs/.env and fill in provider keys
 PORT=8001 npm run dev
 ```
 
@@ -151,7 +151,7 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 
 Then restart backend.
 
-For the Node backend, the equivalent env file is `backend/nodejs/.env`.
+For the Node backend, the equivalent env file is `backend-nodejs/.env`.
 
 ## API Overview
 
@@ -200,7 +200,7 @@ Returns `text/event-stream` with frames: `start`, `delta`, `end`, and `error`.
 ### Python Backend
 
 ```bash
-cd backend/python
+cd backend-python
 make run
 make lint
 make format
@@ -212,7 +212,7 @@ uv run pytest
 ### Node Backend
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 npm run dev
 npm test
 npm run lint
@@ -258,8 +258,8 @@ Frontend coverage includes:
 Recommended validation commands:
 
 ```bash
-cd backend/python && uv run pytest
-cd backend/nodejs && npm test
+cd backend-python && uv run pytest
+cd backend-nodejs && npm test
 cd frontend && npm test -- --run
 cd frontend && npm run build
 ```

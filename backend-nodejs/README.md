@@ -14,7 +14,7 @@ Express + TypeScript backend that mirrors the Python reference API.
 
 ## Environment
 
-Create `backend/nodejs/.env` with the values you want to run locally.
+Create `backend-nodejs/.env` with the values you want to run locally.
 
 ```dotenv
 PORT=8001
@@ -39,7 +39,7 @@ Notes:
 ## Install
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 npm install
 ```
 
@@ -48,7 +48,7 @@ npm install
 Default dev server:
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 npm run dev
 ```
 
@@ -61,14 +61,14 @@ Recommended side-by-side local ports:
 Run Node on `8001` without editing the file:
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 PORT=8001 npm run dev
 ```
 
 Build and run compiled output:
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 npm run build
 npm start
 ```
@@ -76,7 +76,7 @@ npm start
 ## Test And Checks
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 npm test
 npm run lint
 npm run format:check
@@ -165,7 +165,7 @@ Use this when comparing Node behavior against the Python reference.
 ### Run Python reference backend
 
 ```bash
-cd backend/python
+cd backend-python
 make run
 ```
 
@@ -174,7 +174,7 @@ This serves the reference backend on `http://localhost:8000`.
 ### Run Node backend on a separate port
 
 ```bash
-cd backend/nodejs
+cd backend-nodejs
 PORT=8001 npm run dev
 ```
 

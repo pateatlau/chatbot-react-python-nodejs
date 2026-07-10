@@ -1,0 +1,49 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Environment files (keep examples)
+.env
+**/.env
+*.local
+!.env.example
+!**/.env.example
+
+# Python
+**/__pycache__/
+*.py[oc]
+.venv/
+**/.venv/
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+**/.mypy_cache/
+.ruff_cache/
+**/.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Python packaging/build
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend build/test outputs
+coverage/
+**/coverage/
+dist-ssr/
+
+# Documentation for internal use only
+docs/

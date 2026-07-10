@@ -4,11 +4,12 @@ import { MessageBubble } from './MessageBubble'
 
 interface MessageListProps {
   messages: Message[]
+  onRetryMessage?: (messageId: string) => void
 }
 
 const NEAR_BOTTOM_THRESHOLD_PX = 120
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, onRetryMessage }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isNearBottomRef = useRef(true)
@@ -32,7 +33,7 @@ export function MessageList({ messages }: MessageListProps) {
         <p className="message-list__empty">Say hello to start the conversation.</p>
       )}
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
+        <MessageBubble key={message.id} message={message} onRetry={onRetryMessage} />
       ))}
       <div ref={bottomRef} />
     </div>

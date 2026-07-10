@@ -6,6 +6,15 @@
   margin: 0 auto;
 }
 
+.chat-banner {
+  margin: 16px 16px 0;
+  padding: 12px 14px;
+  border: 1px solid #dc2626;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 .message-list {
   flex: 1;
   overflow-y: auto;
@@ -46,10 +55,24 @@
   border: 1px solid #dc2626;
 }
 
+.message-bubble--interrupted {
+  border: 1px solid #f59e0b;
+}
+
 .message-bubble__error {
   color: #dc2626;
   font-size: 0.85em;
   margin: 4px 0 0;
+}
+
+.message-bubble__retry {
+  margin-top: 8px;
+  border: none;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  padding: 6px 12px;
+  cursor: pointer;
 }
 
 .message-bubble__stopped {

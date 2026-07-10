@@ -4,8 +4,11 @@ export interface Message {
   id: string
   role: Role
   content: string
-  status: 'complete' | 'streaming' | 'stopped' | 'error'
+  status: 'complete' | 'streaming' | 'stopped' | 'error' | 'interrupted'
   createdAt: string
+  errorMessage?: string
+  errorCode?: string
+  canRetry?: boolean
 }
 
 export interface ChatRequest {

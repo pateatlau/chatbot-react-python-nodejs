@@ -20,6 +20,19 @@ describe('chatReducer', () => {
     expect(state.messages).toEqual([userMessage])
   })
 
+  it('SET_ERROR and CLEAR_ERROR update the top-level error banner state', () => {
+    const withError = chatReducer(initialChatState, {
+      type: 'SET_ERROR',
+      message: 'Could not reach the backend.',
+    })
+
+    expect(withError.error).toBe('Could not reach the backend.')
+
+    const cleared = chatReducer(withError, { type: 'CLEAR_ERROR' })
+
+    expect(cleared.error).toBeNull()
+  })
+
   it('START_MESSAGE appends an empty streaming assistant message', () => {
     const state = chatReducer(initialChatState, {
       type: 'START_MESSAGE',
@@ -34,6 +47,7 @@ describe('chatReducer', () => {
         content: '',
         status: 'streaming',
         createdAt: 't1',
+        canRetry: false,
       },
     ])
     expect(state.error).toBeNull()
@@ -58,6 +72,7 @@ describe('chatReducer', () => {
     })
 
     expect(afterSecond.messages[0].content).toBe('FastAPI')
+    expect(afterSecond.messages[0].canRetry).toBe(false)
   })
 
   it('END_MESSAGE marks the message complete', () => {
@@ -70,6 +85,40 @@ describe('chatReducer', () => {
     const ended = chatReducer(started, { type: 'END_MESSAGE', id: 'resp_1' })
 
     expect(ended.messages[0].status).toBe('complete')
+    expect(ended.messages[0].canRetry).toBe(false)
+  })
+
+  it('RETRY_MESSAGE clears error metadata and returns the assistant message to streaming', () => {
+    const interruptedState = {
+      error: 'Could not reach the backend.',
+      messages: [
+        {
+          id: 'resp_1',
+          role: 'assistant',
+          content: 'Partial answer',
+          status: 'interrupted',
+          createdAt: 't1',
+          errorMessage: 'The connection dropped before the response finished.',
+          errorCode: 'provider_timeout',
+          canRetry: true,
+        } satisfies Message,
+      ],
+    }
+
+    const retried = chatReducer(interruptedState, {
+      type: 'RETRY_MESSAGE',
+      id: 'resp_1',
+    })
+
+    expect(retried.error).toBeNull()
+    expect(retried.messages[0]).toMatchObject({
+      id: 'resp_1',
+      content: '',
+      status: 'streaming',
+      canRetry: false,
+      errorMessage: undefined,
+      errorCode: undefined,
+    })
   })
 
   it('STOP_MESSAGE marks the message stopped', () => {
@@ -87,7 +136,34 @@ describe('chatReducer', () => {
     expect(stopped.messages[0].status).toBe('stopped')
   })
 
-  it('STREAM_ERROR marks the message errored and sets state.error', () => {
+  it('INTERRUPT_MESSAGE preserves partial content and enables retry', () => {
+    const started = chatReducer(initialChatState, {
+      type: 'START_MESSAGE',
+      id: 'resp_1',
+      createdAt: 't1',
+    })
+
+    const withPartial = chatReducer(started, {
+      type: 'APPEND_DELTA',
+      id: 'resp_1',
+      content: 'Partial answer',
+    })
+
+    const interrupted = chatReducer(withPartial, {
+      type: 'INTERRUPT_MESSAGE',
+      id: 'resp_1',
+      message: 'The connection dropped before the response finished.',
+    })
+
+    expect(interrupted.messages[0]).toMatchObject({
+      content: 'Partial answer',
+      status: 'interrupted',
+      errorMessage: 'The connection dropped before the response finished.',
+      canRetry: true,
+    })
+  })
+
+  it('STREAM_ERROR marks the message errored and stores provider metadata', () => {
     const started = chatReducer(initialChatState, {
       type: 'START_MESSAGE',
       id: 'resp_1',
@@ -98,9 +174,15 @@ describe('chatReducer', () => {
       type: 'STREAM_ERROR',
       id: 'resp_1',
       message: 'Upstream provider failed',
+      code: 'provider_error',
     })
 
-    expect(errored.messages[0].status).toBe('error')
-    expect(errored.error).toBe('Upstream provider failed')
+    expect(errored.messages[0]).toMatchObject({
+      status: 'error',
+      errorMessage: 'Upstream provider failed',
+      errorCode: 'provider_error',
+      canRetry: true,
+    })
+    expect(errored.error).toBeNull()
   })
 })

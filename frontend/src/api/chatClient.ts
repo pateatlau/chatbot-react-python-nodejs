@@ -12,6 +12,44 @@ export interface ChatResponse {
   created_at: string
 }
 
+interface ErrorResponse {
+  error?: {
+    code?: string
+    message?: string
+  }
+}
+
+export class ChatApiError extends Error {
+  status: number
+  code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ChatApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
+export async function toChatApiError(
+  response: Response,
+  fallbackMessage: string,
+): Promise<ChatApiError> {
+  let payload: ErrorResponse | null
+
+  try {
+    payload = (await response.json()) as ErrorResponse
+  } catch {
+    payload = null
+  }
+
+  return new ChatApiError(
+    payload?.error?.message ?? fallbackMessage,
+    response.status,
+    payload?.error?.code,
+  )
+}
+
 /** Calls the non-streaming `POST /api/chat` fallback endpoint. */
 export async function sendChat(request: ChatRequest): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -21,7 +59,7 @@ export async function sendChat(request: ChatRequest): Promise<ChatResponse> {
   })
 
   if (!response.ok) {
-    throw new Error(`Chat request failed: ${response.status}`)
+    throw await toChatApiError(response, `Chat request failed: ${response.status}`)
   }
 
   return (await response.json()) as ChatResponse

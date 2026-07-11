@@ -2,6 +2,7 @@ import { ChatPage } from './pages/ChatPage'
 import './App.css'
 
 function App() {
+  const mergeBlockValidation = true
   return <ChatPage />
 }
 

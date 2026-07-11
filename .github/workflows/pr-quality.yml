@@ -1,0 +1,134 @@
+name: PR Quality Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24.0.0
+  PYTHON_VERSION: 3.12.7
+
+jobs:
+  changes:
+    name: Detect Changed Areas
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend-nodejs: ${{ steps.filter.outputs.backend-nodejs }}
+      backend-python: ${{ steps.filter.outputs.backend-python }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed app paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend-nodejs:
+              - 'backend-nodejs/**'
+            backend-python:
+              - 'backend-python/**'
+
+  frontend-pr:
+    name: Frontend PR Checks
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test -- --run
+
+      - name: Build
+        run: npm run build
+
+  backend-nodejs-pr:
+    name: Backend Node.js PR Checks
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend-nodejs == 'true'
+    defaults:
+      run:
+        working-directory: backend-nodejs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend-nodejs/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  backend-python-pr:
+    name: Backend Python PR Checks
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend-python == 'true'
+    defaults:
+      run:
+        working-directory: backend-python
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend-python/uv.lock
+
+      - name: Sync dependencies
+        run: uv sync --frozen --all-extras --dev
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test

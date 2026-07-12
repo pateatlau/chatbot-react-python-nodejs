@@ -12,6 +12,16 @@ on:
         required: false
         default: https://fullstack-ai-platform-nodejs-production.up.railway.app
         type: string
+      production_backend_healthcheck_url:
+        description: Optional fallback backend healthcheck URL if the production environment variable is not available
+        required: false
+        default: https://fullstack-ai-platform-nodejs-production.up.railway.app/api/health
+        type: string
+      production_frontend_healthcheck_url:
+        description: Optional fallback frontend healthcheck URL if the production environment variable is not available
+        required: false
+        default: https://fullstack-ai-platform-umber.vercel.app/
+        type: string
 
 concurrency:
   group: cd-production
@@ -147,17 +157,19 @@ jobs:
     steps:
       - name: Validate backend healthcheck variable
         env:
-          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL }}
+          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
         shell: bash
         run: |
           test -n "$BACKEND_HEALTHCHECK_URL" || {
             echo "Missing variable: PRODUCTION_BACKEND_HEALTHCHECK_URL" >&2
+            echo "Check Settings -> Environments -> production -> Variables and confirm the exact name is PRODUCTION_BACKEND_HEALTHCHECK_URL." >&2
+            echo "Or rerun the workflow with the optional production_backend_healthcheck_url input." >&2
             exit 1
           }
 
       - name: Probe backend /api/health
         env:
-          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL }}
+          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
         shell: bash
         run: |
           for attempt in {1..20}; do
@@ -242,17 +254,19 @@ jobs:
     steps:
       - name: Validate frontend healthcheck variable
         env:
-          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL }}
+          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
         shell: bash
         run: |
           test -n "$FRONTEND_HEALTHCHECK_URL" || {
             echo "Missing variable: PRODUCTION_FRONTEND_HEALTHCHECK_URL" >&2
+            echo "Check Settings -> Environments -> production -> Variables and confirm the exact name is PRODUCTION_FRONTEND_HEALTHCHECK_URL." >&2
+            echo "Or rerun the workflow with the optional production_frontend_healthcheck_url input." >&2
             exit 1
           }
 
       - name: Probe frontend health endpoint
         env:
-          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL }}
+          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
         shell: bash
         run: |
           for attempt in {1..20}; do
@@ -289,8 +303,8 @@ jobs:
           BACKEND_IMAGE: ${{ needs.preflight.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.preflight.outputs.frontend_image }}
           STARTED_AT: ${{ needs.preflight.outputs.started_at }}
-          BACKEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL }}
-          FRONTEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL }}
+          BACKEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
+          FRONTEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
         with:
           script: |
             const success = [

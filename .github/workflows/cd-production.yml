@@ -1,0 +1,318 @@
+name: CD Production Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Commit SHA from main that passed staging deployment checks
+        required: true
+        type: string
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  preflight:
+    name: Prepare Production Promotion Metadata
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      contents: read
+    outputs:
+      source_sha: ${{ steps.meta.outputs.source_sha }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      started_at: ${{ steps.meta.outputs.started_at }}
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+    steps:
+      - name: Validate source SHA input
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "source_sha must be a full 40-char commit SHA" >&2
+            exit 1
+          fi
+
+      - name: Require successful staging deployment check
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        with:
+          script: |
+            const sourceSha = process.env.SOURCE_SHA;
+
+            const checks = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sourceSha,
+              check_name: 'Staging Deployment',
+              per_page: 100,
+            });
+
+            const successful = checks.data.check_runs.find(
+              (run) => run.name === 'Staging Deployment' && run.conclusion === 'success',
+            );
+
+            if (!successful) {
+              core.setFailed(
+                `No successful \"Staging Deployment\" check-run found for ${sourceSha}. Promote only staging-validated artifacts.`,
+              );
+            }
+
+      - name: Compose immutable artifact references
+        id: meta
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          owner_raw='${{ github.repository_owner }}'
+          owner="${owner_raw,,}"
+          image_tag="sha-${SOURCE_SHA}"
+          started_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          backend_image="${{ env.REGISTRY }}/${owner}/fullstack-ai-platform-backend-nodejs:${image_tag}"
+          frontend_image="${{ env.REGISTRY }}/${owner}/fullstack-ai-platform-frontend:${image_tag}"
+
+          echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "started_at=${started_at}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Production Promotion Metadata"
+            echo "- Environment: production"
+            echo "- Triggered by: ${{ github.actor }}"
+            echo "- Source SHA: ${SOURCE_SHA}"
+            echo "- Immutable backend image: ${backend_image}"
+            echo "- Immutable frontend image: ${frontend_image}"
+            echo "- Started at (UTC): ${started_at}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-backend:
+    name: Deploy Production Backend
+    runs-on: ubuntu-latest
+    environment: production
+    needs: preflight
+    steps:
+      - name: Validate production backend contract
+        env:
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+        shell: bash
+        run: |
+          test -n "$PRODUCTION_API_BASE_URL" || {
+            echo "Missing variable: PRODUCTION_API_BASE_URL" >&2
+            exit 1
+          }
+
+      - name: Skip backend deploy hook trigger (Railway auto-deploy)
+        env:
+          BACKEND_IMAGE: ${{ needs.preflight.outputs.backend_image }}
+          IMAGE_TAG: ${{ needs.preflight.outputs.image_tag }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          STARTED_AT: ${{ needs.preflight.outputs.started_at }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+        shell: bash
+        run: |
+          {
+            echo "### Backend Deploy Trigger"
+            echo "- Mode: skipped"
+            echo "- Reason: Railway is configured for GitHub auto-deploy"
+            echo "- Source SHA: ${SOURCE_SHA}"
+            echo "- Artifact tag: ${IMAGE_TAG}"
+            echo "- Expected backend image: ${BACKEND_IMAGE}"
+            echo "- Backend base URL: ${PRODUCTION_API_BASE_URL}"
+            echo "- Recorded at (UTC): ${STARTED_AT}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-backend:
+    name: Verify Production Backend Health
+    runs-on: ubuntu-latest
+    needs: [preflight, deploy-backend]
+    environment: production
+    steps:
+      - name: Validate backend healthcheck variable
+        env:
+          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL }}
+        shell: bash
+        run: |
+          test -n "$BACKEND_HEALTHCHECK_URL" || {
+            echo "Missing variable: PRODUCTION_BACKEND_HEALTHCHECK_URL" >&2
+            exit 1
+          }
+
+      - name: Probe backend /api/health
+        env:
+          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL }}
+        shell: bash
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 10 "$BACKEND_HEALTHCHECK_URL"; then
+              {
+                echo "### Backend Verification"
+                echo "- Endpoint: $BACKEND_HEALTHCHECK_URL"
+                echo "- Result: PASS"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            if [[ "$attempt" -eq 20 ]]; then
+              echo "Backend health check failed after ${attempt} attempts" >&2
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+  deploy-frontend:
+    name: Deploy Production Frontend
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [preflight, verify-backend]
+    steps:
+      - name: Validate production frontend contract
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+        shell: bash
+        run: |
+          test -n "$DEPLOY_WEBHOOK_URL" || {
+            echo "Missing secret: PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL" >&2
+            exit 1
+          }
+          test -n "$PRODUCTION_API_BASE_URL" || {
+            echo "Missing variable: PRODUCTION_API_BASE_URL" >&2
+            exit 1
+          }
+
+      - name: Trigger production frontend deploy hook
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL }}
+          FRONTEND_IMAGE: ${{ needs.preflight.outputs.frontend_image }}
+          IMAGE_TAG: ${{ needs.preflight.outputs.image_tag }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          STARTED_AT: ${{ needs.preflight.outputs.started_at }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+        shell: bash
+        run: |
+          payload="$(jq -n \
+            --arg environment "production" \
+            --arg service "frontend" \
+            --arg image "$FRONTEND_IMAGE" \
+            --arg artifactTag "$IMAGE_TAG" \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg timestamp "$STARTED_AT" \
+            --arg viteApiBaseUrl "$PRODUCTION_API_BASE_URL" \
+            '{
+              environment: $environment,
+              service: $service,
+              image: $image,
+              artifactTag: $artifactTag,
+              sourceSha: $sourceSha,
+              timestamp: $timestamp,
+              viteApiBaseUrl: $viteApiBaseUrl
+            }')"
+
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 60 \
+            -X POST "$DEPLOY_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            --data "$payload"
+
+  verify-frontend:
+    name: Verify Production Frontend Reachability
+    runs-on: ubuntu-latest
+    needs: [preflight, deploy-frontend]
+    environment: production
+    steps:
+      - name: Validate frontend healthcheck variable
+        env:
+          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL }}
+        shell: bash
+        run: |
+          test -n "$FRONTEND_HEALTHCHECK_URL" || {
+            echo "Missing variable: PRODUCTION_FRONTEND_HEALTHCHECK_URL" >&2
+            exit 1
+          }
+
+      - name: Probe frontend health endpoint
+        env:
+          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL }}
+        shell: bash
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail-with-body --silent --show-error --connect-timeout 5 --max-time 10 "$FRONTEND_HEALTHCHECK_URL"; then
+              {
+                echo "### Frontend Verification"
+                echo "- Endpoint: $FRONTEND_HEALTHCHECK_URL"
+                echo "- Result: PASS"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            if [[ "$attempt" -eq 20 ]]; then
+              echo "Frontend health check failed after ${attempt} attempts" >&2
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+  report:
+    name: Publish Production Deployment Check
+    runs-on: ubuntu-latest
+    environment: production
+    if: always()
+    needs: [preflight, verify-backend, verify-frontend]
+    permissions:
+      checks: write
+    steps:
+      - name: Publish deployment check-run
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          BACKEND_IMAGE: ${{ needs.preflight.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.preflight.outputs.frontend_image }}
+          STARTED_AT: ${{ needs.preflight.outputs.started_at }}
+          BACKEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL }}
+          FRONTEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL }}
+        with:
+          script: |
+            const success = [
+              '${{ needs.verify-backend.result }}',
+              '${{ needs.verify-frontend.result }}',
+            ].every((result) => result === 'success');
+
+            const summary = [
+              'Environment: production',
+              `Source SHA: ${process.env.SOURCE_SHA}`,
+              `Backend image: ${process.env.BACKEND_IMAGE}`,
+              `Frontend image: ${process.env.FRONTEND_IMAGE}`,
+              `Started at: ${process.env.STARTED_AT}`,
+              `Backend health endpoint: ${process.env.BACKEND_HEALTH_ENDPOINT}`,
+              `Frontend health endpoint: ${process.env.FRONTEND_HEALTH_ENDPOINT}`,
+              `Verification result: ${success ? 'PASS' : 'FAIL'}`,
+            ].join('\n');
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Production Deployment',
+              head_sha: process.env.SOURCE_SHA,
+              status: 'completed',
+              conclusion: success ? 'success' : 'failure',
+              output: {
+                title: success ? 'Production deployment succeeded' : 'Production deployment failed',
+                summary,
+              },
+            });
+
+      - name: Fail workflow when deployment checks fail
+        if: needs.verify-backend.result != 'success' || needs.verify-frontend.result != 'success'
+        run: exit 1

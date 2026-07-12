@@ -119,7 +119,7 @@ jobs:
     steps:
       - name: Validate production backend contract
         env:
-          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL != '' && vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
         shell: bash
         run: |
           test -n "$PRODUCTION_API_BASE_URL" || {
@@ -135,7 +135,7 @@ jobs:
           IMAGE_TAG: ${{ needs.preflight.outputs.image_tag }}
           SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
           STARTED_AT: ${{ needs.preflight.outputs.started_at }}
-          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL != '' && vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
         shell: bash
         run: |
           {
@@ -157,7 +157,7 @@ jobs:
     steps:
       - name: Validate backend healthcheck variable
         env:
-          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
+          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
         shell: bash
         run: |
           test -n "$BACKEND_HEALTHCHECK_URL" || {
@@ -169,7 +169,7 @@ jobs:
 
       - name: Probe backend /api/health
         env:
-          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
+          BACKEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
         shell: bash
         run: |
           for attempt in {1..20}; do
@@ -198,8 +198,8 @@ jobs:
     steps:
       - name: Validate production frontend contract
         env:
-          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL != '' && secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL || secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL_FALLBACK }}
-          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL != '' && vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL || secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL_FALLBACK }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
         shell: bash
         run: |
           test -n "$DEPLOY_WEBHOOK_URL" || {
@@ -216,12 +216,12 @@ jobs:
 
       - name: Trigger production frontend deploy hook
         env:
-          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL != '' && secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL || secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL_FALLBACK }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL || secrets.PRODUCTION_FRONTEND_DEPLOY_WEBHOOK_URL_FALLBACK }}
           FRONTEND_IMAGE: ${{ needs.preflight.outputs.frontend_image }}
           IMAGE_TAG: ${{ needs.preflight.outputs.image_tag }}
           SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
           STARTED_AT: ${{ needs.preflight.outputs.started_at }}
-          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL != '' && vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || inputs.production_api_base_url }}
         shell: bash
         run: |
           payload="$(jq -n \
@@ -255,7 +255,7 @@ jobs:
     steps:
       - name: Validate frontend healthcheck variable
         env:
-          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
+          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
         shell: bash
         run: |
           test -n "$FRONTEND_HEALTHCHECK_URL" || {
@@ -267,7 +267,7 @@ jobs:
 
       - name: Probe frontend health endpoint
         env:
-          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
+          FRONTEND_HEALTHCHECK_URL: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
         shell: bash
         run: |
           for attempt in {1..20}; do
@@ -304,8 +304,8 @@ jobs:
           BACKEND_IMAGE: ${{ needs.preflight.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.preflight.outputs.frontend_image }}
           STARTED_AT: ${{ needs.preflight.outputs.started_at }}
-          BACKEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
-          FRONTEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL != '' && vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
+          BACKEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_BACKEND_HEALTHCHECK_URL || inputs.production_backend_healthcheck_url }}
+          FRONTEND_HEALTH_ENDPOINT: ${{ vars.PRODUCTION_FRONTEND_HEALTHCHECK_URL || inputs.production_frontend_healthcheck_url }}
         with:
           script: |
             const success = [

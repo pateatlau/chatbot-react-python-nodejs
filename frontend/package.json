@@ -16,6 +16,10 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
+  "overrides": {
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.2",

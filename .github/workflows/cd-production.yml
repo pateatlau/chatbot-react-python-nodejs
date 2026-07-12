@@ -10,6 +10,7 @@ on:
       production_api_base_url:
         description: Optional fallback API base URL if the production environment variable is not available
         required: false
+        default: https://fullstack-ai-platform-nodejs-production.up.railway.app
         type: string
 
 concurrency:

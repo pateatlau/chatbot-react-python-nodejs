@@ -5,6 +5,10 @@ from collections.abc import Awaitable, Callable
 from typing import AsyncIterator, Protocol, cast
 
 from fastapi import Request
+from groq import APITimeoutError as GroqAPITimeoutError
+from groq import RateLimitError as GroqRateLimitError
+from anthropic import APITimeoutError as AnthropicAPITimeoutError
+from anthropic import RateLimitError as AnthropicRateLimitError
 
 from app.core.config import Settings, get_settings
 from app.providers.base import LLMProvider, ProviderChunk
@@ -70,7 +74,17 @@ def normalize_chat_error(exc: Exception) -> ChatServiceError:
         return exc
 
     error_name = exc.__class__.__name__.lower()
-    if isinstance(exc, TimeoutError) or "timeout" in error_name:
+    if (
+        isinstance(
+            exc,
+            (
+                TimeoutError,
+                GroqAPITimeoutError,
+                AnthropicAPITimeoutError,
+            ),
+        )
+        or "timeout" in error_name
+    ):
         return ProviderTimeoutError()
     if any(
         token in error_name
@@ -80,7 +94,7 @@ def normalize_chat_error(exc: Exception) -> ChatServiceError:
             "toomanyrequests",
             "resourceexhausted",
         )
-    ):
+    ) or isinstance(exc, (GroqRateLimitError, AnthropicRateLimitError)):
         return ProviderRateLimitedError()
     return ProviderError()
 
@@ -105,10 +119,14 @@ class ChatService:
         model = request.model or self._default_model(provider_name)
         return provider, model, provider_name
 
-    def _default_model(self, provider_name: str) -> str:
-        if provider_name == "gemini":
-            return self._settings.gemini_model
-        return self._settings.openai_model
+    def _default_model(self, provider_name: ProviderName) -> str:
+        default_models: dict[ProviderName, str] = {
+            "openai": self._settings.openai_model,
+            "gemini": self._settings.gemini_model,
+            "groq": self._settings.groq_model,
+            "anthropic": self._settings.anthropic_model,
+        }
+        return default_models[provider_name]
 
     async def _complete_with_timeout(
         self,

@@ -462,11 +462,14 @@ function ChatPageContent() {
     })()
   }
 
-  const handleCloseSidebar = () => {
+  const handleCloseMobileSidebar = useCallback(() => {
     setIsMobileSidebarOpen(false)
+  }, [])
+
+  const handleCloseSidebar = useCallback(() => {
     setIsSidebarCollapsed(true)
     persistSidebarCollapsedPreference(true)
-  }
+  }, [])
 
   const handleExpandSidebar = () => {
     setIsSidebarCollapsed(false)
@@ -476,13 +479,13 @@ function ChatPageContent() {
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsMobileSidebarOpen(false)
+        handleCloseMobileSidebar()
       }
     }
 
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [])
+  }, [handleCloseMobileSidebar])
 
   useEffect(() => {
     if (!isMobileSidebarOpen) return
@@ -508,7 +511,7 @@ function ChatPageContent() {
           type="button"
           className="fixed inset-0 z-30 bg-zinc-500/20 md:hidden"
           aria-label="Close sidebar overlay"
-          onClick={handleCloseSidebar}
+          onClick={handleCloseMobileSidebar}
         />
       ) : null}
 
@@ -525,7 +528,14 @@ function ChatPageContent() {
             <h2 className="text-sm font-semibold tracking-wide text-zinc-900">Sessions</h2>
             <button
               type="button"
-              className="rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              className="rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
+              onClick={handleCloseMobileSidebar}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className="hidden rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:inline-flex"
               onClick={handleCloseSidebar}
             >
               Close

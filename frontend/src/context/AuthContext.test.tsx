@@ -12,7 +12,21 @@ import {
   storeSession,
 } from '../auth/tokenStorage'
 import * as authClient from '../api/authClient'
-import type { AuthenticatedUser } from '../types/auth'
+import type { AuthenticatedUser, TokenResponse } from '../types/auth'
+
+function createDeferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason?: unknown) => void
+} {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
 
 const user: AuthenticatedUser = {
   id: 'user-1',
@@ -45,8 +59,31 @@ describe('AuthContext', () => {
     expect(result.current.user).toBeNull()
   })
 
+  it('clears a dangling access token when the stored user is missing (partial/corrupt state)', () => {
+    // Simulate a partial localStorage state (e.g. token written but the user
+    // write failed/was cleared separately) without going through storeSession,
+    // which always writes both.
+    window.localStorage.setItem('auth.accessToken', 'orphaned-token')
+
+    const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
+
+    expect(result.current.status).toBe('guest')
+    expect(result.current.user).toBeNull()
+    expect(getStoredAccessToken()).toBeNull()
+  })
+
+  it('clears a dangling stored user when the access token is missing (reverse partial/corrupt state)', () => {
+    window.localStorage.setItem('auth.user', JSON.stringify(user))
+
+    const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
+
+    expect(result.current.status).toBe('guest')
+    expect(result.current.user).toBeNull()
+    expect(getStoredUser()).toBeNull()
+  })
+
   it('rehydrates an authenticated session from storage on mount', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
 
     const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
 
@@ -74,6 +111,17 @@ describe('AuthContext', () => {
 
     expect(result.current.status).toBe('authenticated')
     expect(result.current.sessionExpired).toBe(false)
+  })
+
+  it('treats a malformed stored token as expired (fail closed) rather than trusting it', () => {
+    storeSession('not-a-real-jwt', user)
+
+    const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
+
+    expect(result.current.status).toBe('guest')
+    expect(result.current.user).toBeNull()
+    expect(result.current.sessionExpired).toBe(true)
+    expect(getStoredAccessToken()).toBeNull()
   })
 
   it('dismissSessionExpired clears the flag', () => {
@@ -109,7 +157,7 @@ describe('AuthContext', () => {
   })
 
   it('logout clears the stored session and reverts to guest', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
     const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
     await waitFor(() => expect(result.current.status).toBe('authenticated'))
 
@@ -236,7 +284,7 @@ describe('AuthContext', () => {
   })
 
   it('handleInvalidAccessToken clears the session and flags sessionExpired', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
     const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
     await waitFor(() => expect(result.current.status).toBe('authenticated'))
 
@@ -251,7 +299,7 @@ describe('AuthContext', () => {
   })
 
   it('retains the guest token across logout', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
     storeGuestToken('presenting-guest-token')
     const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
     await waitFor(() => expect(result.current.status).toBe('authenticated'))
@@ -261,5 +309,116 @@ describe('AuthContext', () => {
     })
 
     expect(getStoredGuestToken()).toBe('presenting-guest-token')
+  })
+
+  it('ignores a login result that resolves after logout() already ran (stale attempt guard)', async () => {
+    const deferred = createDeferred<TokenResponse>()
+    vi.spyOn(authClient, 'loginWithGoogle').mockReturnValue(deferred.promise)
+
+    const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
+
+    let loginPromise: Promise<void> = Promise.resolve()
+    act(() => {
+      loginPromise = result.current.login('google-id-token')
+    })
+
+    act(() => {
+      result.current.logout()
+    })
+    expect(result.current.status).toBe('guest')
+
+    await act(async () => {
+      deferred.resolve({
+        access_token: 'new-jwt',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user,
+      })
+      await loginPromise
+    })
+
+    expect(result.current.status).toBe('guest')
+    expect(result.current.user).toBeNull()
+    expect(getStoredAccessToken()).toBeNull()
+  })
+
+  it('ignores a login result that resolves after handleInvalidAccessToken() already ran (stale attempt guard)', async () => {
+    const deferred = createDeferred<TokenResponse>()
+    vi.spyOn(authClient, 'loginWithGoogle').mockReturnValue(deferred.promise)
+
+    const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
+
+    let loginPromise: Promise<void> = Promise.resolve()
+    act(() => {
+      loginPromise = result.current.login('google-id-token')
+    })
+
+    act(() => {
+      result.current.handleInvalidAccessToken()
+    })
+    expect(result.current.sessionExpired).toBe(true)
+
+    await act(async () => {
+      deferred.resolve({
+        access_token: 'new-jwt',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user,
+      })
+      await loginPromise
+    })
+
+    // The stale login must not resurrect authenticated state nor clear the
+    // sessionExpired prompt set by the newer handleInvalidAccessToken() call.
+    expect(result.current.status).toBe('guest')
+    expect(result.current.sessionExpired).toBe(true)
+    expect(getStoredAccessToken()).toBeNull()
+  })
+
+  it('applies only the newer login result when two login() calls overlap and the older resolves last', async () => {
+    const firstAttempt = createDeferred<TokenResponse>()
+    const secondAttempt = createDeferred<TokenResponse>()
+    vi.spyOn(authClient, 'loginWithGoogle')
+      .mockReturnValueOnce(firstAttempt.promise)
+      .mockReturnValueOnce(secondAttempt.promise)
+
+    const { result } = renderHook(() => useAuthContext(), { wrapper: AuthProvider })
+
+    let firstLoginPromise: Promise<void> = Promise.resolve()
+    let secondLoginPromise: Promise<void> = Promise.resolve()
+    act(() => {
+      firstLoginPromise = result.current.login('first-id-token')
+    })
+    act(() => {
+      secondLoginPromise = result.current.login('second-id-token')
+    })
+
+    const secondUser: AuthenticatedUser = { ...user, id: 'user-2', display_name: 'Second' }
+
+    // The newer (second) call resolves first...
+    await act(async () => {
+      secondAttempt.resolve({
+        access_token: 'second-jwt',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user: secondUser,
+      })
+      await secondLoginPromise
+    })
+    expect(result.current.user).toEqual(secondUser)
+
+    // ...and the stale (first) call resolving afterward must not overwrite it.
+    await act(async () => {
+      firstAttempt.resolve({
+        access_token: 'first-jwt',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user,
+      })
+      await firstLoginPromise
+    })
+
+    expect(result.current.user).toEqual(secondUser)
+    expect(getStoredAccessToken()).toBe('second-jwt')
   })
 })

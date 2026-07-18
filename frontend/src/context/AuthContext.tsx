@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
 import { AuthApiError, loginWithGoogle } from '../api/authClient'
 import { isJwtExpired } from '../auth/jwt'
 import {
@@ -69,6 +69,12 @@ function readStoredSession(): StoredSession {
   const storedToken = getStoredAccessToken()
   const storedUser = getStoredUser()
   if (!storedToken || !storedUser) {
+    // Partial/corrupt state (a token without a user, or a user without a
+    // token) must not leave either half available to chatClient, which
+    // reads the token independently of AuthContext's state: a stale token
+    // here would keep attaching `Authorization: Bearer ...` while the UI
+    // reports guest — an inconsistent, hard-to-debug state.
+    clearAccessToken()
     return { status: 'guest', user: null, expired: false }
   }
   if (isJwtExpired(storedToken)) {
@@ -84,21 +90,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(initialSession.user)
   const [loginError, setLoginError] = useState<LoginErrorInfo | null>(null)
   const [sessionExpired, setSessionExpired] = useState<boolean>(initialSession.expired)
+  // Monotonically increasing id guarding against a stale, still in-flight
+  // `login()` call applying its result/error after a newer `login()`,
+  // `logout()`, or `handleInvalidAccessToken()` has already superseded it.
+  const loginAttemptIdRef = useRef(0)
 
   const login = async (idToken: string): Promise<void> => {
+    const attemptId = ++loginAttemptIdRef.current
     setLoginError(null)
     try {
       const result = await loginWithGoogle(idToken, getStoredGuestToken() ?? undefined)
+      if (loginAttemptIdRef.current !== attemptId) {
+        return
+      }
       storeSession(result.access_token, result.user)
       setUser(result.user)
       setStatus('authenticated')
       setSessionExpired(false)
     } catch (error) {
+      if (loginAttemptIdRef.current !== attemptId) {
+        return
+      }
       setLoginError(classifyLoginError(error))
     }
   }
 
   const logout = (): void => {
+    loginAttemptIdRef.current += 1
     // Retains the guest token (plan Section 4.3): only the app JWT is discarded.
     clearAccessToken()
     setUser(null)
@@ -107,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const handleInvalidAccessToken = (): void => {
+    loginAttemptIdRef.current += 1
     clearAccessToken()
     setUser(null)
     setStatus('guest')

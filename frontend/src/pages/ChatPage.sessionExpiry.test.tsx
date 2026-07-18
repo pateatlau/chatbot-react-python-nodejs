@@ -30,6 +30,15 @@ const user: AuthenticatedUser = {
   picture_url: null,
 }
 
+// isJwtExpired() fails closed on malformed tokens, so this test needs a real
+// (unsigned, but well-formed) JWT shape to pre-seed an authenticated session.
+function makeJwt(expSecondsFromNow: number): string {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const exp = Math.floor(Date.now() / 1000) + expSecondsFromNow
+  const payload = btoa(JSON.stringify({ exp }))
+  return `${header}.${payload}.signature`
+}
+
 describe('ChatPage session-expiry UX', () => {
   beforeEach(() => {
     Object.defineProperty(globalThis.HTMLElement.prototype, 'scrollIntoView', {
@@ -46,7 +55,7 @@ describe('ChatPage session-expiry UX', () => {
   })
 
   it('clears the session and shows a dismissible re-login prompt on an invalid_access_token stream error, and chat keeps working', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
 
     const fetchMock = vi
       .fn()
@@ -76,6 +85,10 @@ describe('ChatPage session-expiry UX', () => {
 
     const banner = await screen.findByRole('status')
     expect(banner.textContent).toContain('Your session expired')
+
+    // No stale/duplicate chat error banner for the same invalid_access_token
+    // event — the session-expired banner already communicates it.
+    expect(screen.queryByRole('alert')).toBeNull()
 
     // Reverted to guest UI (no more authenticated user indicator).
     expect(screen.queryByText('Person')).toBeNull()

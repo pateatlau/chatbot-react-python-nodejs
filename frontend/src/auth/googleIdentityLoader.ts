@@ -22,7 +22,17 @@ export function loadGoogleIdentityScript(): Promise<void> {
   }
 
   loadPromise = new Promise<void>((resolve, reject) => {
-    const onLoad = () => resolve()
+    const onLoad = () => {
+      if (window.google?.accounts?.id) {
+        resolve()
+        return
+      }
+      // The script tag fired `load`, but the expected global never showed up
+      // (CSP block, ad-blocker, partial/blocked third-party load). Reset so
+      // the next call retries instead of permanently reporting "ready".
+      loadPromise = null
+      reject(new Error('Google Identity Services loaded but did not initialize.'))
+    }
     const onError = () => {
       loadPromise = null
       reject(new Error('Failed to load Google Identity Services.'))

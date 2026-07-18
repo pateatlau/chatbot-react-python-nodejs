@@ -32,6 +32,15 @@ const user: AuthenticatedUser = {
   picture_url: null,
 }
 
+// isJwtExpired() fails closed on malformed tokens, so tests that pre-seed an
+// authenticated session need a real (unsigned, but well-formed) JWT shape.
+function makeJwt(expSecondsFromNow: number): string {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const exp = Math.floor(Date.now() / 1000) + expSecondsFromNow
+  const payload = btoa(JSON.stringify({ exp }))
+  return `${header}.${payload}.signature`
+}
+
 describe('AuthControls', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -53,7 +62,7 @@ describe('AuthControls', () => {
   })
 
   it('shows the user indicator and Logout action when authenticated', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
 
     render(
       <AuthProvider>
@@ -68,7 +77,7 @@ describe('AuthControls', () => {
   })
 
   it('logging out reverts the UI to the guest login affordance', async () => {
-    storeSession('stored-jwt', user)
+    storeSession(makeJwt(3600), user)
 
     render(
       <AuthProvider>

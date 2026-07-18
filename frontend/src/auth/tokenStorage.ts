@@ -37,8 +37,16 @@ export function storeSession(accessToken: string, user: AuthenticatedUser): void
     window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
     window.localStorage.setItem(USER_KEY, JSON.stringify(user))
   } catch {
-    // localStorage may be unavailable (private mode, quota exceeded); the
-    // session simply won't persist across reloads in that case.
+    // Roll back so a partial write (e.g. the token persisted but the user
+    // write then failed, private mode/quota exceeded) never leaves a
+    // dangling, user-less access token that chatClient would still attach
+    // to requests.
+    try {
+      window.localStorage.removeItem(ACCESS_TOKEN_KEY)
+      window.localStorage.removeItem(USER_KEY)
+    } catch {
+      // localStorage is unavailable entirely; nothing further to do.
+    }
   }
 }
 

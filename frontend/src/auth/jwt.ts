@@ -15,7 +15,8 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
   try {
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const json = atob(base64)
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    const json = atob(padded)
     return JSON.parse(json) as Record<string, unknown>
   } catch {
     return null
@@ -30,5 +31,12 @@ export function getJwtExpiryMs(token: string): number | null {
 
 export function isJwtExpired(token: string): boolean {
   const expiryMs = getJwtExpiryMs(token)
-  return expiryMs !== null && expiryMs <= Date.now()
+  // Fail closed: a malformed token or a payload with a missing/non-numeric
+  // `exp` can't be confirmed unexpired, so treat it as expired rather than
+  // silently trusting it (this only ever affects local UX advisory state —
+  // the backend independently re-validates the token on every request).
+  if (expiryMs === null) {
+    return true
+  }
+  return expiryMs <= Date.now()
 }

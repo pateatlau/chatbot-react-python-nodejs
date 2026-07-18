@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearAccessToken,
   getStoredAccessToken,
@@ -45,6 +45,41 @@ describe('tokenStorage', () => {
 
     expect(getStoredAccessToken()).toBeNull()
     expect(getStoredUser()).toBeNull()
+  })
+
+  it('rolls back the access token if the user write fails, keeping storage atomic', () => {
+    // vi.spyOn on jsdom's localStorage.setItem is unreliable (jsdom
+    // implements Storage via a Proxy), so use a small fake Storage we fully
+    // control instead: the 2nd setItem call (USER_KEY) throws, simulating a
+    // failure partway through storeSession's two writes.
+    const backing = new Map<string, string>()
+    let setItemCalls = 0
+    const fakeStorage: Storage = {
+      getItem: (key: string) => backing.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        setItemCalls += 1
+        if (setItemCalls === 2) {
+          throw new Error('QuotaExceededError')
+        }
+        backing.set(key, value)
+      },
+      removeItem: (key: string) => {
+        backing.delete(key)
+      },
+      clear: () => backing.clear(),
+      key: (index: number) => Array.from(backing.keys())[index] ?? null,
+      get length() {
+        return backing.size
+      },
+    }
+    vi.stubGlobal('localStorage', fakeStorage)
+
+    storeSession('jwt-token', user)
+
+    expect(getStoredAccessToken()).toBeNull()
+    expect(getStoredUser()).toBeNull()
+
+    vi.unstubAllGlobals()
   })
 
   it('round-trips the guest token through storeGuestToken', () => {

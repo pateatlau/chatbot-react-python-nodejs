@@ -104,28 +104,30 @@ function ChatPageContent() {
         }
 
         if (error.code === INVALID_ACCESS_TOKEN_CODE) {
+          // The session-expired banner already communicates this; avoid also
+          // surfacing a stale/confusing chat error for the same event.
           handleInvalidAccessToken()
-        }
-
-        const localMessageId = streamMessageMapRef.current.get(error.id) ?? id
-        if (localMessageId) {
-          dispatch({
-            type: 'STREAM_ERROR',
-            id: localMessageId,
-            message: error.message,
-            code: error.code,
-          })
         } else {
-          dispatch({ type: 'SET_ERROR', message: error.message })
+          const localMessageId = streamMessageMapRef.current.get(error.id) ?? id
+          if (localMessageId) {
+            dispatch({
+              type: 'STREAM_ERROR',
+              id: localMessageId,
+              message: error.message,
+              code: error.code,
+            })
+          } else {
+            dispatch({ type: 'SET_ERROR', message: error.message })
+          }
         }
         streamMessageMapRef.current.delete(error.id)
       } else {
         if (error instanceof ChatApiError) {
           if (error.code === INVALID_ACCESS_TOKEN_CODE) {
+            // The session-expired banner already communicates this; avoid also
+            // surfacing a stale/confusing chat error for the same event.
             handleInvalidAccessToken()
-          }
-
-          if (id) {
+          } else if (id) {
             dispatch({
               type: 'STREAM_ERROR',
               id,

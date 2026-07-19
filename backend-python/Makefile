@@ -1,12 +1,15 @@
 UV := uv
 
-.PHONY: run lint format format-check test db-migrate db-revision db-reset db-seed
+.PHONY: run lint typecheck format format-check test db-migrate db-revision db-reset db-seed
 
 run:
 	$(UV) run python -m uvicorn app.main:app --reload --port 8000
 
 lint:
 	$(UV) run python -m ruff check app tests
+
+typecheck:
+	$(UV) run pyright app tests
 
 format:
 	$(UV) run python -m black app tests

@@ -1,15 +1,24 @@
 # OS / editor
 .DS_Store
+Thumbs.db
+Desktop.ini
+__MACOSX/
 .idea/
 .vscode/*
 !.vscode/extensions.json
 
-# Environment files (keep examples)
+# Environment files (keep examples and templates)
 .env
 **/.env
+.env.*
+**/.env.*
 *.local
 !.env.example
 !**/.env.example
+!.env.required
+!**/.env.required
+!.env.compose
+!**/.env.compose
 
 # Python
 **/__pycache__/
@@ -39,8 +48,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.log
 
-# Frontend build/test outputs
+# Frontend dev/build caches and outputs
+.vite/
+**/.vite/
+.vitest/
+**/.vitest/
 coverage/
 **/coverage/
 dist-ssr/

@@ -73,3 +73,11 @@ repos:
         files: ^backend-python/.*\.py$
         exclude: ^backend-python/(__pycache__|\.venv|venv)/
         pass_filenames: false
+
+      - id: backend-python-pyright
+        name: backend-python-pyright
+        entry: bash -c 'cd backend-python && uv run pyright app tests'
+        language: system
+        files: ^backend-python/.*\.py$
+        exclude: ^backend-python/(__pycache__|\.venv|venv)/
+        pass_filenames: false

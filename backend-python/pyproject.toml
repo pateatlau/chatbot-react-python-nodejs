@@ -23,6 +23,13 @@ dev = [
     "black>=26.5.1",
     "httpx>=0.28.1",
     "pre-commit>=4.2.0",
+    "pyright>=1.1.411",
     "pytest>=8.4.1",
     "ruff>=0.15.21",
 ]
+
+[tool.pyright]
+include = ["app", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false

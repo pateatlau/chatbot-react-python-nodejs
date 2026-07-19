@@ -21,6 +21,8 @@ Current backend scope includes Phase 7-10 work:
 - Groq SDK
 - Anthropic SDK
 
+Dev tooling: Ruff (lint), Black (format), Pyright (static type checking), pytest
+
 ## Layout
 
 - `app/main.py` - app creation, CORS, router wiring
@@ -69,12 +71,13 @@ The app now fails fast during settings load if the selected provider key is miss
 ```bash
 make run
 make lint
+make typecheck
 make format
 make format-check
 make test
 ```
 
-These Make targets intentionally run tooling through `python -m ...` so commands always resolve from the project virtual environment and not from any global Python/Conda PATH entries.
+These Make targets run through `uv run ...` so commands always resolve from the project virtual environment and not from any global Python/Conda PATH entries.
 
 If a command works with `uv run ...` but fails with plain `python`, you are almost certainly on the wrong interpreter.
 
@@ -88,9 +91,22 @@ On native Windows, `make` is not installed by default.
 ```bash
 uv run python -m uvicorn app.main:app --reload --port 8000
 uv run python -m ruff check app tests
+uv run pyright app tests
 uv run python -m black app tests
 uv run python -m black --check app tests
 uv run python -m pytest -q
+```
+
+## Type Checking
+
+Static analysis is enforced with [Pyright](https://github.com/microsoft/pyright), configured in `pyproject.toml` under `[tool.pyright]`. The project uses `typeCheckingMode = "basic"` for `app/` and `tests/`.
+
+Pyright aligns with the Pylance language server in Cursor/VS Code, so local editor diagnostics and CI should report the same issues.
+
+```bash
+make typecheck
+# or
+uv run pyright app tests
 ```
 
 ## Run
@@ -204,6 +220,7 @@ Full backend validation:
 ```bash
 uv run python -m pytest
 uv run python -m ruff check app tests
+uv run pyright app tests
 ```
 
 Current backend tests cover:

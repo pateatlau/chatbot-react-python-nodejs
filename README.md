@@ -164,6 +164,7 @@ The Python backend Makefile commands are convenient, but `make` is not installed
 cd backend-python
 uv run python -m uvicorn app.main:app --reload --port 8000
 uv run python -m ruff check app tests
+uv run pyright app tests
 uv run python -m pytest -q
 ```
 
@@ -218,7 +219,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 | `frontend/`       | ESLint                                | No (requires fix) | < 2s    |
 | `backend-nodejs/` | Prettier format                       | Yes               | < 1s    |
 | `backend-nodejs/` | ESLint                                | No (requires fix) | < 2s    |
-| `backend-python/` | Ruff check + Black format             | Yes               | < 3s    |
+| `backend-python/` | Ruff check, Black format, Pyright     | Ruff/Black only   | < 10s   |
 | Shared            | Trailing whitespace, YAML/JSON syntax | Yes               | < 1s    |
 
 **Total typical runtime: < 5 seconds per commit**
@@ -231,6 +232,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 
 - Formatting checks (Prettier, Black)
 - Linting checks (ESLint, Ruff)
+- Type checking (Pyright for Python backend)
 - File validation (trailing whitespace, JSON/YAML syntax)
 - **Why:** Keep developer feedback loop tight, catch issues immediately
 
@@ -239,6 +241,8 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 - Full test suites (see `npm test`, `make test`)
 - Build validation (see `npm run build`, `make build`)
 - **Why:** Reserve CI resources for comprehensive validation; developer commits should be fast
+
+PR CI for `backend-python/` also runs `make typecheck` (Pyright) alongside lint and tests.
 
 #### Bypass Policy
 
@@ -277,6 +281,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 | `eslint not found`              | Node dependencies missing          | `npm install` in `frontend/` or `backend-nodejs/`     |
 | `ruff not found`                | Python dependencies missing        | `uv sync` in `backend-python/`                        |
 | `black not found`               | Python dependencies missing        | `uv sync` in `backend-python/`                        |
+| `pyright not found`             | Python dependencies missing        | `uv sync` in `backend-python/`                        |
 | Hooks timeout (> 20s)           | Large diff or missing dependencies | Check dependency installation, try smaller commits    |
 | Hooks modify files unexpectedly | Auto-fix hooks reformatting code   | Re-stage auto-fixed files after hook run, then commit |
 
@@ -286,6 +291,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 | -------------------------- | --------------------------------------------------------------------------- |
 | ESLint errors block commit | Fix the issue in code (cannot auto-fix); see ESLint output for details      |
 | Ruff check failures        | Run `cd backend-python && uv run ruff check --fix app tests`, then re-stage |
+| Pyright type errors        | Fix reported types; verify with `cd backend-python && make typecheck`       |
 | Prettier disagreement      | Re-run `pre-commit run --all-files` to auto-fix, then re-stage              |
 | Black formatting diff      | Re-run `pre-commit run --all-files` to auto-fix, then re-stage              |
 
@@ -438,6 +444,7 @@ Before running locally, make sure the selected backend provider has a real API k
 cd backend-python
 make run
 make lint
+make typecheck
 make format
 make format-check
 make test
@@ -493,7 +500,7 @@ Frontend coverage includes:
 Recommended validation commands:
 
 ```bash
-cd backend-python && uv run pytest
+cd backend-python && uv run pytest && make typecheck
 cd backend-nodejs && npm test
 cd frontend && npm test -- --run
 cd frontend && npm run build

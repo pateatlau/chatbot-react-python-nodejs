@@ -67,6 +67,8 @@ def test_build_usage_record_estimates_when_provider_omits_usage() -> None:
     assert record.token_source == "estimated"
     assert record.prompt_tokens == estimate_tokens(prompt)
     assert record.completion_tokens == estimate_tokens(completion)
+    assert record.prompt_tokens is not None
+    assert record.completion_tokens is not None
     assert record.total_tokens == record.prompt_tokens + record.completion_tokens
 
 

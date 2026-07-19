@@ -1,18 +1,15 @@
 # Frontend Application
 
-Streaming chat UI for the Fullstack AI Platform project.
+Streaming chat UI for the Fullstack AI Platform. **MVP complete (2026-07-19)** — pairs with the hardened Python backend in production.
 
-Current frontend scope includes the completed chatbot redesign and validation work:
+## Capabilities
 
-- Tailwind CSS v4-based ChatGPT-like app shell
-- Responsive sidebar foundation for future multi-chat sessions
-- Polished conversation thread and sticky composer
-- Inline Retry after interrupted streams
-- Top-of-page banner for total connection failures
-- Stop/cancel support during streaming
-- Reducer, composer, and accessibility smoke coverage
-- Provider/model selection in the composer for OpenAI, Gemini, Groq, and Anthropic
-- Deployment env wiring for a hosted backend
+- Tailwind CSS v4 ChatGPT-like shell with responsive sidebar (drawer / collapse)
+- SSE streaming with stop, retry, and connection-error banner
+- Google OAuth sign-in; guest session continuity via `X-Guest-Token`
+- Forwards `X-Request-ID` on retry for request traceability
+- Provider/model selection (OpenAI, Gemini, Groq, Anthropic) in the composer
+- Vitest coverage for SSE parsing, reducer, composer, and accessibility smoke tests
 
 ## Features
 
@@ -74,12 +71,13 @@ npm run build    # type-check + production build
 npm run preview  # preview production build
 ```
 
-Recommended CI-style checks:
+Recommended CI-style checks (matches PR Quality Gates):
 
 ```bash
+npm run lint
+npm run format:check
 npm test -- --run
 npm run build
-npm run lint
 ```
 
 ## Streaming Flow
@@ -114,21 +112,26 @@ Frontend expects backend endpoints:
 
 If the backend is not running or CORS is misconfigured, streaming requests will fail.
 
-The frontend expects the backend to support:
+The frontend expects the Python production backend to support:
 
 - SSE `start`, `delta`, `end`, and `error` frames
-- Standard non-streaming error envelopes
+- Standard error envelope `{ error: { code, message, request_id } }`
+- `X-Request-ID` on every response (forwarded on retry via `chatClient.ts`)
+- `X-Guest-Token` and `X-Guest-Quota-Remaining` for anonymous callers
 - CORS for the active frontend origin
 - Provider selection values for OpenAI, Gemini, Groq, and Anthropic
 
 ## Tests
 
-Current frontend tests cover:
+Current frontend tests: **90 passed** (Vitest, 2026-07-19).
+
+Coverage includes:
 
 - SSE frame parsing across arbitrary chunk boundaries
 - Reducer transitions for streaming, interruption, retry, and error cases
 - Page-level composer behavior with streamed tokens and Stop
 - Composer provider/model selection wiring and payload coverage
+- `X-Request-ID` retry forwarding in `chatClient.ts`
 - Shell accessibility smoke coverage for core landmarks and controls
 
 ## Deployment Notes

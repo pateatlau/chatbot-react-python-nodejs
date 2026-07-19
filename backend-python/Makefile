@@ -1,6 +1,6 @@
 UV := uv
 
-.PHONY: run lint typecheck format format-check test db-migrate db-revision db-reset db-seed
+.PHONY: run lint typecheck format format-check test test-cov db-migrate db-revision db-reset db-seed
 
 run:
 	$(UV) run python -m uvicorn app.main:app --reload --port 8000
@@ -12,13 +12,20 @@ typecheck:
 	$(UV) run pyright app tests
 
 format:
-	$(UV) run python -m black app tests
+	$(UV) run python -m ruff format app tests
 
 format-check:
-	$(UV) run python -m black --check app tests
+	$(UV) run python -m ruff format --check app tests
 
 test:
-	$(UV) run python -m pytest -q
+	$(UV) run python -m pytest -q --cov=app --cov-report=term-missing:skip-covered
+
+test-cov:
+	$(UV) run python -m pytest -q \
+		--cov=app \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage.xml \
+		--cov-fail-under=80
 
 db-migrate:
 	$(UV) run alembic upgrade head

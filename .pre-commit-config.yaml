@@ -55,7 +55,7 @@ repos:
         exclude: ^backend-nodejs/(node_modules|dist|build)/
         pass_filenames: false
 
-  # Python backend: ruff check and black format check
+  # Python backend: ruff check, ruff format (auto-fix locally; CI uses format-check)
   - repo: local
     hooks:
       - id: backend-python-ruff-check
@@ -66,9 +66,9 @@ repos:
         exclude: ^backend-python/(__pycache__|\.venv|venv)/
         pass_filenames: false
 
-      - id: backend-python-black-check
-        name: backend-python-black-check
-        entry: bash -c 'cd backend-python && uv run black app tests'
+      - id: backend-python-ruff-format
+        name: backend-python-ruff-format
+        entry: bash -c 'cd backend-python && uv run ruff format app tests'
         language: system
         files: ^backend-python/.*\.py$
         exclude: ^backend-python/(__pycache__|\.venv|venv)/

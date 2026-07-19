@@ -1,35 +1,32 @@
-import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.types import Message
 
 from app.core.config import get_settings
-from app.core.security import AuthError
+from app.core.errors import error_response, register_exception_handlers
+from app.core.logging import bind_context, get_logger, setup_logging
 from app.db.engine import get_engine
-from app.routers import auth, chat, health
-from app.schemas.chat import ErrorDetail, ErrorResponseSchema
-from app.services.chat_service import ChatServiceError
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-MAX_REQUEST_BODY_BYTES = 16 * 1024
-REQUEST_BODY_LIMIT_MESSAGE = (
-    "Request body exceeds the 16384 byte limit. Reduce message size and retry."
+from app.middleware.correlation_id import (
+    REQUEST_ID_HEADER,
+    correlation_id_middleware,
 )
+from app.middleware.rate_limit import rate_limit_middleware
+from app.routers import auth, chat, health
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Startup: the async engine/session factory are created lazily on first use.
+    setup_logging(settings)
+    settings.log_development_warnings(logger)
     yield
-    # Shutdown: dispose the engine so pooled DB connections are released cleanly.
     await get_engine().dispose()
 
 
@@ -41,26 +38,14 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
-    expose_headers=["X-Guest-Token", "X-Guest-Quota-Remaining"],
+    expose_headers=["X-Guest-Token", "X-Guest-Quota-Remaining", REQUEST_ID_HEADER],
 )
 
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(chat.router)
 
-
-def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
-    payload = ErrorResponseSchema(error=ErrorDetail(code=code, message=message))
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
-
-
-def _format_validation_errors(exc: RequestValidationError) -> str:
-    messages: list[str] = []
-    for error in exc.errors():
-        location = ".".join(str(part) for part in error["loc"] if part != "body")
-        prefix = f"{location}: " if location else ""
-        messages.append(f"{prefix}{error['msg']}")
-    return "; ".join(messages) or "Request validation failed."
+register_exception_handlers(app)
 
 
 class RequestBodyTooLargeError(Exception):
@@ -71,19 +56,23 @@ class RequestBodyTooLargeError(Exception):
 async def enforce_request_size(
     request: Request, call_next: RequestResponseEndpoint
 ) -> Response:
+    body_limit = settings.request_body_limit_bytes
+    limit_message = settings.request_body_limit_message()
+
     if request.method in {"POST", "PUT", "PATCH"}:
         content_length = request.headers.get("content-length")
         if content_length:
             try:
-                if int(content_length) > MAX_REQUEST_BODY_BYTES:
-                    return _error_response(
+                if int(content_length) > body_limit:
+                    return error_response(
                         status_code=413,
                         code="validation_error",
-                        message=REQUEST_BODY_LIMIT_MESSAGE,
+                        message=limit_message,
                     )
             except ValueError:
                 logger.warning(
-                    "Ignoring invalid content-length header: %s", content_length
+                    "Ignoring invalid content-length header",
+                    content_length=content_length,
                 )
 
         received_bytes = 0
@@ -96,7 +85,7 @@ async def enforce_request_size(
                 body = message.get("body", b"")
                 if isinstance(body, bytes):
                     received_bytes += len(body)
-                    if received_bytes > MAX_REQUEST_BODY_BYTES:
+                    if received_bytes > body_limit:
                         raise RequestBodyTooLargeError
 
             return message
@@ -104,39 +93,56 @@ async def enforce_request_size(
         try:
             return await call_next(Request(request.scope, receive_with_limit))
         except RequestBodyTooLargeError:
-            return _error_response(
+            return error_response(
                 status_code=413,
                 code="validation_error",
-                message=REQUEST_BODY_LIMIT_MESSAGE,
+                message=limit_message,
             )
 
     return await call_next(request)
 
 
-@app.exception_handler(ChatServiceError)
-async def handle_chat_service_error(_: Request, exc: ChatServiceError) -> JSONResponse:
-    return _error_response(exc.status_code, exc.code, exc.message)
+@app.middleware("http")
+async def log_requests(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
+    start = time.perf_counter()
+    bind_context(route=request.url.path, method=request.method)
+    try:
+        response = await call_next(request)
+    except Exception:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        logger.error(
+            "Request failed",
+            status_code=500,
+            latency_ms=latency_ms,
+            exc_info=True,
+        )
+        raise
+    else:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        logger.info(
+            "Request completed",
+            status_code=response.status_code,
+            latency_ms=latency_ms,
+        )
+        return response
 
 
-@app.exception_handler(AuthError)
-async def handle_auth_error(_: Request, exc: AuthError) -> JSONResponse:
-    return _error_response(exc.status_code, exc.code, exc.message)
+@app.middleware("http")
+async def enforce_rate_limit(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
+    return await rate_limit_middleware(request, call_next)
 
 
-@app.exception_handler(RequestValidationError)
-async def handle_request_validation_error(
-    _: Request, exc: RequestValidationError
-) -> JSONResponse:
-    return _error_response(422, "validation_error", _format_validation_errors(exc))
+@app.middleware("http")
+async def assign_correlation_id(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
+    return await correlation_id_middleware(request, call_next)
 
 
-@app.exception_handler(Exception)
-async def handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled server error", exc_info=exc)
-    return _error_response(500, "internal_error", "Unexpected server error.")
-
-
-# Root endpoint for basic health check or welcome message
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Chatbot Backend!"}

@@ -20,16 +20,30 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "black>=26.5.1",
     "httpx>=0.28.1",
     "pre-commit>=4.2.0",
     "pyright>=1.1.411",
     "pytest>=8.4.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.15.21",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/db/seed.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
 
 [tool.pyright]
 include = ["app", "tests"]
 pythonVersion = "3.12"
-typeCheckingMode = "basic"
+typeCheckingMode = "standard"
 reportMissingTypeStubs = false

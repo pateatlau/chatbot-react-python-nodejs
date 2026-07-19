@@ -3,7 +3,9 @@ import {
   ChatApiError,
   createChatSession,
   getChatSession,
+  getLastRequestId,
   listChatSessions,
+  setRetryRequestId,
 } from '../api/chatClient'
 import { type ProviderName } from '../constants/providerModels'
 import { AuthControls } from '../components/AuthControls'
@@ -351,6 +353,7 @@ function ChatPageContent() {
       return
     }
 
+    setRetryRequestId(getLastRequestId())
     startRequest(request, messageId)
   }
 

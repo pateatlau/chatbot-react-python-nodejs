@@ -57,13 +57,13 @@ class GroqProvider:
         model: str,
         temperature: float = 0.7,
     ) -> AsyncIterator[ProviderChunk]:
-        stream: AsyncStream[ChatCompletionChunk] = (
-            await self._client.chat.completions.create(
-                model=model,
-                messages=_to_groq_messages(messages),
-                temperature=temperature,
-                stream=True,
-            )
+        stream: AsyncStream[
+            ChatCompletionChunk
+        ] = await self._client.chat.completions.create(
+            model=model,
+            messages=_to_groq_messages(messages),
+            temperature=temperature,
+            stream=True,
         )
 
         async for event in stream:

@@ -5,6 +5,27 @@ const API_BASE_URL: string =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
 
 const GUEST_TOKEN_HEADER = 'X-Guest-Token'
+export const REQUEST_ID_HEADER = 'X-Request-ID'
+
+let lastRequestId: string | null = null
+let pendingRetryRequestId: string | null = null
+
+/**
+ * When set, the next API request forwards this value as ``X-Request-ID`` so
+ * backend retries stay correlated with the original attempt.
+ */
+export function setRetryRequestId(requestId: string | null): void {
+  pendingRetryRequestId = requestId
+}
+
+export function getLastRequestId(): string | null {
+  return lastRequestId
+}
+
+/** Captures ``X-Request-ID`` from a response for retry traceability. */
+function captureRequestId(response: Response): void {
+  lastRequestId = response.headers.get(REQUEST_ID_HEADER)
+}
 
 /**
  * Attaches `Authorization: Bearer <jwt>` when an app JWT is stored (Decision D1),
@@ -20,6 +41,10 @@ function buildRequestHeaders(): HeadersInit {
   const guestToken = getStoredGuestToken()
   if (guestToken) {
     headers[GUEST_TOKEN_HEADER] = guestToken
+  }
+  if (pendingRetryRequestId) {
+    headers[REQUEST_ID_HEADER] = pendingRetryRequestId
+    pendingRetryRequestId = null
   }
   return headers
 }
@@ -90,6 +115,7 @@ export async function sendChat(request: ChatRequest): Promise<ChatResponse> {
   })
 
   captureGuestToken(response)
+  captureRequestId(response)
 
   if (!response.ok) {
     throw await toChatApiError(response, `Chat request failed: ${response.status}`)
@@ -112,6 +138,7 @@ export async function streamChat(request: ChatRequest, signal: AbortSignal): Pro
   })
 
   captureGuestToken(response)
+  captureRequestId(response)
 
   return response
 }
@@ -126,6 +153,7 @@ export async function listChatSessions(): Promise<ChatSessionListItem[]> {
   })
 
   captureGuestToken(response)
+  captureRequestId(response)
 
   if (!response.ok) {
     throw await toChatApiError(response, `Failed to list chat sessions: ${response.status}`)
@@ -142,6 +170,7 @@ export async function createChatSession(): Promise<ChatSessionDetail> {
   })
 
   captureGuestToken(response)
+  captureRequestId(response)
 
   if (!response.ok) {
     throw await toChatApiError(response, `Failed to create chat session: ${response.status}`)
@@ -158,6 +187,7 @@ export async function getChatSession(sessionId: string): Promise<ChatSessionDeta
   })
 
   captureGuestToken(response)
+  captureRequestId(response)
 
   if (!response.ok) {
     throw await toChatApiError(response, `Failed to load chat session: ${response.status}`)

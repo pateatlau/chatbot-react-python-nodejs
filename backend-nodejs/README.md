@@ -1,8 +1,21 @@
-# Nodejs API Service
+# Node.js API Service
 
-Express + TypeScript backend that mirrors the Python reference API.
+Express + TypeScript backend with **chat-only API parity** against the Python reference.
 
-Status: post-MVP track. Production currently defaults to the Python backend.
+## MVP Status
+
+**Not the production backend.** Railway deploys the Python service for MVP. This Node backend remains available for local comparison and future work.
+
+| Capability                           | Python (production) | Node (this app) |
+| ------------------------------------ | ------------------- | --------------- |
+| Chat (stream + non-stream)           | Yes                 | Yes             |
+| Multi-provider (OpenAI, Gemini)      | Yes                 | Yes             |
+| Google OAuth / JWT / persistence     | Yes                 | No              |
+| Structured logging + correlation IDs | Yes                 | No              |
+| Centralized errors with `request_id` | Yes                 | Partial         |
+| HTTP rate limiting                   | Yes                 | No              |
+
+Post-MVP hardening plan: `docs/plans/nodejs-backend-v1.md`.
 
 ## Stack
 
@@ -79,11 +92,13 @@ npm start
 
 ```bash
 cd backend-nodejs
-npm test
 npm run lint
 npm run format:check
+npm test
 npm run build
 ```
+
+Current suite (2026-07-19): **26 passed** (Vitest). CI runs lint, format check, test, and build on Node PRs.
 
 ## Endpoints
 

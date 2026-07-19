@@ -1,5 +1,5 @@
 import asyncio
-import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.caller import CallerContext
 from app.core.config import Settings, get_settings
+from app.core.logging import get_logger
 from app.db.models import ChatMessage, ChatSession, SessionSummary, UsageEvent
 from app.providers.base import LLMProvider, ProviderChunk, ProviderCompletion
 from app.providers.factory import ProviderFactory
@@ -35,7 +36,7 @@ from app.schemas.chat import (
 )
 from app.services.usage_service import build_usage_record
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ChatStore(Protocol):
@@ -226,7 +227,7 @@ class NewChatForbiddenError(ChatServiceError):
 class DbUnavailableError(ChatServiceError):
     def __init__(self) -> None:
         super().__init__(
-            code="db_unavailable",
+            code="database_error",
             message="The database is temporarily unavailable.",
             status_code=503,
         )
@@ -352,6 +353,27 @@ class ChatService:
             provider.complete_chat(request.messages, model, request.temperature),
             timeout=self._settings.request_timeout_seconds,
         )
+
+    async def _complete_and_log(
+        self,
+        provider: LLMProvider,
+        request: ChatRequestSchema,
+        model: str,
+        provider_name: ProviderName,
+        *,
+        event: str = "Chat completion",
+    ) -> ProviderCompletion:
+        start = time.perf_counter()
+        try:
+            return await self._complete_with_timeout(provider, request, model)
+        finally:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            logger.info(
+                event,
+                provider=provider_name,
+                model=model,
+                latency_ms=latency_ms,
+            )
 
     # ---- persistence helpers ------------------------------------------------
 
@@ -600,10 +622,10 @@ class ChatService:
             return
 
         logger.info(
-            "Summarization triggered for session %s (pending=%d, threshold=%d)",
-            session_id,
-            len(pending),
-            threshold,
+            "Summarization triggered",
+            session_id=str(session_id),
+            pending_messages=len(pending),
+            threshold=threshold,
         )
         summary_input = self._build_summary_input(latest, pending)
         try:
@@ -613,7 +635,9 @@ class ChatService:
             )
         except Exception:  # noqa: BLE001 - summary is best-effort; retry next turn
             logger.warning(
-                "Summarization failed for session %s", session_id, exc_info=True
+                "Summarization failed",
+                session_id=str(session_id),
+                exc_info=True,
             )
             return
 
@@ -627,10 +651,10 @@ class ChatService:
             model=model,
         )
         logger.info(
-            "Summarization succeeded for session %s (version=%d, covers_through_seq=%d)",
-            session_id,
-            version,
-            pending[-1].seq,
+            "Summarization succeeded",
+            session_id=str(session_id),
+            version=version,
+            covers_through_seq=pending[-1].seq,
         )
         if self._usage_store is not None:
             record = build_usage_record(
@@ -664,7 +688,9 @@ class ChatService:
 
         if not self._persistence_active(caller):
             try:
-                completion = await self._complete_with_timeout(provider, request, model)
+                completion = await self._complete_and_log(
+                    provider, request, model, provider_name
+                )
             except Exception as exc:  # noqa: BLE001 - normalize provider failures
                 raise normalize_chat_error(exc) from exc
             return ChatResponseSchema(
@@ -715,7 +741,9 @@ class ChatService:
             raise DbUnavailableError() from exc
 
         try:
-            completion = await self._complete_with_timeout(provider, request, model)
+            completion = await self._complete_and_log(
+                provider, request, model, provider_name
+            )
         except Exception as exc:  # noqa: BLE001 - normalize provider failures
             app_error = normalize_chat_error(exc)
             error_seq = await self._chat_store.allocate_seq(chat_session.id)
@@ -953,6 +981,7 @@ class ChatService:
         closable_provider_stream: ClosableAsyncIterator | None = None
         collected: list[str] = []
         finish_reason = "stop"
+        stream_start = time.perf_counter()
 
         try:
             provider_stream = provider.stream_chat(
@@ -964,7 +993,8 @@ class ChatService:
             while True:
                 if await http_request.is_disconnected():
                     logger.info(
-                        "Client disconnected, stopping stream for %s", response_id
+                        "Client disconnected, stopping stream",
+                        response_id=response_id,
                     )
                     await self._persist_stream_result(
                         caller=caller,
@@ -1004,14 +1034,25 @@ class ChatService:
                 finish_reason=finish_reason,
                 status="complete",
             )
+            latency_ms = int((time.perf_counter() - stream_start) * 1000)
+            logger.info(
+                "Chat stream completed",
+                provider=provider_name,
+                model=model,
+                latency_ms=latency_ms,
+                response_id=response_id,
+            )
             yield _format_sse(
                 "end", EndFrame(id=response_id, finish_reason=finish_reason)
             )
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 - normalize any provider failure into a frame
+        except Exception as exc:  # noqa: BLE001 - normalize any provider failure into a frame
             app_error = normalize_chat_error(exc)
-            logger.exception("Provider stream failed for %s", response_id)
+            logger.exception(
+                "Provider stream failed",
+                response_id=response_id,
+                provider=provider_name,
+                model=model,
+            )
             try:
                 await self._persist_stream_result(
                     caller=caller,
@@ -1024,7 +1065,10 @@ class ChatService:
                     status="error",
                 )
             except Exception:  # noqa: BLE001 - best-effort error persistence
-                logger.exception("Failed to persist stream error state")
+                logger.exception(
+                    "Failed to persist stream error state",
+                    response_id=response_id,
+                )
             yield _format_sse(
                 "error",
                 ErrorFrame(

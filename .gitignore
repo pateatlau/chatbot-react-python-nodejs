@@ -33,6 +33,7 @@ __MACOSX/
 **/.ruff_cache/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 
 # Python packaging/build

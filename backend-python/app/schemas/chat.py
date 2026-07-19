@@ -98,6 +98,7 @@ class ChatResponseSchema(BaseModel):
 class ErrorDetail(BaseModel):
     code: str
     message: str
+    request_id: str | None = None
 
 
 class ErrorResponseSchema(BaseModel):

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.caller import CallerContext, get_current_caller
 from app.core.config import Settings, get_settings
+from app.core.logging import bind_context, get_logger
 from app.db.chat import SqlChatStore
 from app.db.engine import get_sessionmaker
 from app.db.identity import SqlGuestQuotaStore
@@ -31,6 +32,7 @@ from app.services.chat_service import ChatService, SessionNotFoundError
 from app.services.quota_service import QuotaService
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 async def get_optional_session(
@@ -99,6 +101,9 @@ async def create_chat(
     caller: CallerContext | None = Depends(get_optional_caller),
     service: ChatService = Depends(get_chat_service),
 ) -> ChatResponseSchema:
+    if caller is not None and caller.user_id is not None:
+        bind_context(user_id=str(caller.user_id))
+    logger.info("Chat request accepted", route="/api/chat", method="POST")
     result = await service.complete_chat(request, caller)
     await _set_guest_headers(response, caller, service)
     return result
@@ -111,6 +116,9 @@ async def create_chat_stream(
     caller: CallerContext | None = Depends(get_optional_caller),
     service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
+    if caller is not None and caller.user_id is not None:
+        bind_context(user_id=str(caller.user_id))
+    logger.info("Chat stream accepted", route="/api/chat/stream", method="POST")
     # Pre-flight (quota/session/user-append) runs before streaming so quota or
     # ownership failures surface as normal HTTP errors.
     prep = await service.prepare_stream(request, caller)

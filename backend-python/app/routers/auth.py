@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request
 
 from app.core.caller import GUEST_TOKEN_HEADER
 from app.core.config import Settings, get_settings
+from app.core.logging import get_logger
 from app.core.security import AuthConfigError
 from app.db.identity import SqlGuestStore, SqlUserStore
 from app.db.session import get_db_session
@@ -23,6 +24,7 @@ from app.services.auth_service import (
 )
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 def get_google_verifier(
@@ -63,6 +65,12 @@ async def login_with_google(
 ) -> TokenResponse:
     guest_token = request.headers.get(GUEST_TOKEN_HEADER)
     result = await service.login_with_google(payload.id_token, guest_token)
+    logger.info(
+        "Google login succeeded",
+        user_id=str(result.user.id),
+        route="/api/auth/google",
+        method="POST",
+    )
     return TokenResponse(
         access_token=result.access_token,
         expires_in=result.expires_in,

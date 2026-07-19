@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.core.config import APP_VERSION, Settings, get_settings
+from app.core.errors import DATABASE_ERROR_MESSAGE, error_response
 from app.db.engine import get_engine
 
 router = APIRouter()
@@ -29,5 +30,5 @@ async def readiness() -> JSONResponse:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
     except Exception:
-        return JSONResponse(status_code=503, content={"status": "error", "db": "down"})
+        return error_response(503, "database_error", DATABASE_ERROR_MESSAGE)
     return JSONResponse(status_code=200, content={"status": "ok", "db": "ok"})

@@ -88,12 +88,10 @@ class GoogleIDTokenVerifier:
             # verify_oauth2_token checks signature, expiry, and that the token's
             # audience matches self._client_id; it raises ValueError otherwise.
             # google-auth ships no type stubs, so this member is untyped.
-            verified: Mapping[str, Any] = (
-                google_id_token.verify_oauth2_token(  # pyright: ignore[reportUnknownMemberType]
-                    raw_id_token,
-                    google_requests.Request(),
-                    self._client_id,
-                )
+            verified: Mapping[str, Any] = google_id_token.verify_oauth2_token(  # pyright: ignore[reportUnknownMemberType]
+                raw_id_token,
+                google_requests.Request(),
+                self._client_id,
             )
             return verified
 

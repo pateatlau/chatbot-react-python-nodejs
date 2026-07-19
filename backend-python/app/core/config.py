@@ -1,10 +1,14 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
 _INSECURE_DEV_JWT_SECRET = "dev-insecure-jwt-secret-change-me"
+_DEFAULT_DATABASE_URL = "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
+
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
 
 class Settings(BaseSettings):
@@ -32,7 +36,7 @@ class Settings(BaseSettings):
 
     cors_allowed_origins: str = "http://localhost:5173"
 
-    database_url: str = "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
+    database_url: str = _DEFAULT_DATABASE_URL
 
     # Google OAuth 2.0 (ID-token verification). Required to serve /api/auth/google.
     google_client_id: str | None = None
@@ -59,16 +63,28 @@ class Settings(BaseSettings):
     app_env: str = "development"
     max_message_length: int = 4000
     request_timeout_seconds: int = 30
+    request_body_limit_bytes: int = Field(default=16 * 1024, ge=1)
+    log_level: LogLevel = "INFO"
 
-    @model_validator(mode="after")
-    def validate_jwt_secret(self) -> "Settings":
-        env = self.app_env.strip().lower()
-        if env != "development" and self.jwt_secret == _INSECURE_DEV_JWT_SECRET:
+    # HTTP rate limiting (Phase 5 middleware; per-minute sliding window).
+    rate_limit_anonymous_per_minute: int = Field(default=30, ge=1)
+    rate_limit_authenticated_per_minute: int = Field(default=120, ge=1)
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("LOG_LEVEL must be a string.")
+        normalized = value.strip().upper()
+        if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
             raise ValueError(
-                "JWT_SECRET must be explicitly set when APP_ENV is not "
-                "'development'."
+                f"LOG_LEVEL must be one of DEBUG, INFO, WARNING, ERROR; got '{value}'."
             )
-        return self
+        return normalized
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env.strip().lower() == "development"
 
     @property
     def cors_allowed_origins_list(self) -> list[str]:
@@ -77,6 +93,13 @@ class Settings(BaseSettings):
             for origin in self.cors_allowed_origins.split(",")
             if origin.strip()
         ]
+
+    def request_body_limit_message(self) -> str:
+        limit = self.request_body_limit_bytes
+        return (
+            f"Request body exceeds the {limit} byte limit. "
+            "Reduce message size and retry."
+        )
 
     def validate_provider_key(self) -> None:
         """Fail fast if the selected provider's API key is missing."""
@@ -109,9 +132,66 @@ class Settings(BaseSettings):
                 "Set it in backend-python/.env (see .env.example)."
             )
 
+    def validate_production_requirements(self) -> None:
+        """Fail fast on missing or insecure settings outside development."""
+        if self.is_development:
+            return
+
+        errors: list[str] = []
+
+        if self.jwt_secret == _INSECURE_DEV_JWT_SECRET:
+            errors.append(
+                "JWT_SECRET must be explicitly set when APP_ENV is not 'development'."
+            )
+
+        if self.database_url == _DEFAULT_DATABASE_URL:
+            errors.append(
+                "DATABASE_URL must be explicitly set when APP_ENV is not 'development'."
+            )
+
+        if not self.google_client_id or not self.google_client_id.strip():
+            errors.append(
+                "GOOGLE_CLIENT_ID must be set when APP_ENV is not 'development' "
+                "(auth routes are enabled)."
+            )
+
+        if errors:
+            raise ValueError(" ".join(errors))
+
+    def log_development_warnings(self, logger: object) -> None:
+        """Emit human-readable warnings for permissive development defaults."""
+        if not self.is_development:
+            return
+
+        warn = getattr(logger, "warning", None)
+        if not callable(warn):
+            return
+
+        if self.jwt_secret == _INSECURE_DEV_JWT_SECRET:
+            warn(
+                "Using default JWT_SECRET; override before deploying outside "
+                "development."
+            )
+
+        if not self.google_client_id or not self.google_client_id.strip():
+            warn(
+                "GOOGLE_CLIENT_ID is not set; POST /api/auth/google will return "
+                "auth_not_configured."
+            )
+
+        if self.database_url == _DEFAULT_DATABASE_URL:
+            warn(
+                "Using default DATABASE_URL (localhost postgres); ensure postgres "
+                "is running when persistence or auth is used."
+            )
+
+    def validate_startup(self) -> None:
+        self.validate_provider_key()
+        self.validate_production_requirements()
+
 
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    settings.validate_provider_key()
+    settings.validate_startup()
     return settings

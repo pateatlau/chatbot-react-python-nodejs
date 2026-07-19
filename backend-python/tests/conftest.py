@@ -10,11 +10,25 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("CHAT_PERSISTENCE_ENABLED", "false")
 
 import pytest
+from collections.abc import Iterator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
+from app.middleware.rate_limit import reset_rate_limiter
+
+
+@pytest.fixture(autouse=True)
+def _isolate_rate_limit_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    # Prevent the shared test client IP bucket from tripping default limits.
+    monkeypatch.setenv("RATE_LIMIT_ANONYMOUS_PER_MINUTE", "100000")
+    monkeypatch.setenv("RATE_LIMIT_AUTHENTICATED_PER_MINUTE", "100000")
+    reset_rate_limiter()
+    get_settings.cache_clear()
+    yield
+    reset_rate_limiter()
+    get_settings.cache_clear()
 
 
 @pytest.fixture

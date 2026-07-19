@@ -1,4 +1,5 @@
 from typing import cast
+import json
 
 import pytest
 from anthropic import APITimeoutError as AnthropicAPITimeoutError
@@ -12,8 +13,8 @@ from groq import APITimeoutError as GroqAPITimeoutError
 from groq import RateLimitError as GroqRateLimitError
 from starlette.types import Message, Scope
 
-from app.core.config import Settings
-from app.main import MAX_REQUEST_BODY_BYTES, app, enforce_request_size
+from app.core.config import Settings, get_settings
+from app.main import app, enforce_request_size
 from app.schemas.chat import ChatMessageSchema, ChatRequestSchema
 from app.providers.base import ProviderCompletion
 from app.providers.factory import ProviderFactory
@@ -254,12 +255,11 @@ async def test_chat_endpoint_normalizes_provider_errors(
         )
 
     assert response.status_code == 502
-    assert response.json() == {
-        "error": {
-            "code": "provider_error",
-            "message": "Upstream provider failed.",
-        }
-    }
+    body = response.json()
+    assert body["error"]["code"] == "provider_error"
+    assert body["error"]["message"] == "Upstream provider failed."
+    assert body["error"]["request_id"] is not None
+    assert response.headers.get("X-Request-ID") == body["error"]["request_id"]
 
 
 @pytest.mark.parametrize(
@@ -353,7 +353,8 @@ async def test_chat_service_rejects_invalid_default_provider_setting() -> None:
 
 @pytest.mark.anyio
 async def test_request_size_guard_rejects_large_chunked_body() -> None:
-    oversized_body = b"x" * (MAX_REQUEST_BODY_BYTES + 1)
+    body_limit = get_settings().request_body_limit_bytes
+    oversized_body = b"x" * (body_limit + 1)
     messages: list[Message] = [
         {"type": "http.request", "body": oversized_body, "more_body": False}
     ]
@@ -384,7 +385,6 @@ async def test_request_size_guard_rejects_large_chunked_body() -> None:
     response = await enforce_request_size(request, call_next)
 
     assert response.status_code == 413
-    assert response.body == (
-        b'{"error":{"code":"validation_error","message":"Request body exceeds '
-        b'the 16384 byte limit. Reduce message size and retry."}}'
-    )
+    body = json.loads(bytes(response.body))
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["message"] == get_settings().request_body_limit_message()

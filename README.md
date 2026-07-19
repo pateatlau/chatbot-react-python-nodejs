@@ -1,30 +1,44 @@
 # Fullstack AI Platform
 
-A full-stack streaming chatbot project with:
+A full-stack streaming chatbot with Google OAuth, guest sessions, multi-provider LLM support, and production-grade Python backend hardening.
 
-- Frontend: React + TypeScript + Vite
-- Backends: FastAPI (Python) and Express + TypeScript (Node.js)
-- LLM providers: OpenAI, Gemini, Groq, and Anthropic (switchable via environment variables)
+- **Frontend:** React + TypeScript + Vite + Tailwind CSS v4
+- **Production backend:** FastAPI (Python) on Railway
+- **Reference / paused backend:** Express + TypeScript (Node.js) — chat-only parity; hardening deferred post-MVP
+- **LLM providers:** OpenAI, Gemini, Groq, and Anthropic (env-driven switching)
 
-Current status:
+## MVP Status (Complete — 2026-07-19)
 
-- Frontend chatbot page redesigned with Tailwind CSS v4 into a responsive ChatGPT-like shell
-- Sidebar foundation added for future multi-chat sessions, with mobile drawer and tablet collapse behavior
-- Stream interruption handling with inline Retry UI
-- Typed backend error envelopes and SSE error frames
-- Request-size and schema validation on both backends
-- Backend and frontend automated test coverage for the main chat flow
-- OpenAI, Gemini, Groq, and Anthropic provider support behind the same frontend contract
-- Python backend is the active MVP backend in production (Railway)
-- Node backend is paused until post-MVP work resumes
-- Deployment runbook and prerequisite checklist documented for Railway + Vercel
+The MVP engineering track is **complete**. The Python backend is the production reference.
+
+| Area | Status |
+| ---- | ------ |
+| Env validation & config | Done |
+| Structured logging (JSON in production) | Done |
+| Correlation IDs (`X-Request-ID`) | Done |
+| Centralized error envelope | Done |
+| HTTP rate limiting (`Retry-After`) | Done |
+| Pyright standard mode + Ruff format/lint | Done |
+| CI quality gates (lint, format, typecheck, coverage ≥ 80%) | Done |
+| Node.js backend alignment | **Deferred** — see `docs/plans/nodejs-backend-v1.md` |
+
+Validation record: `docs/plans/mvp-completion-implementation-plan.md` (Phase 9).
+
+## Current Capabilities
+
+- Responsive ChatGPT-like UI with sidebar, streaming, stop, and retry
+- Google OAuth login with app-issued JWT; anonymous guest token flow
+- Chat persistence (sessions, messages, guest quota) when enabled
+- Non-streaming and SSE streaming chat across four LLM providers
+- Typed error envelopes and SSE error frames with `request_id`
+- Request-size and schema validation; provider timeout normalization
 
 ## Repository Structure
 
-- `backend-python/` - FastAPI active MVP backend
-- `backend-nodejs/` - Express + TypeScript post-MVP backend (currently paused)
-- `frontend/` - React client with streaming UI
-- `docs/` - planning notes (ignored by git in this repo setup)
+- `backend-python/` — **active MVP / production backend**
+- `backend-nodejs/` — post-MVP reference backend (paused)
+- `frontend/` — React client
+- `docs/` — plans and runbooks
 
 ## Features
 
@@ -70,8 +84,12 @@ flowchart LR
     Anthropic[("Anthropic API")]
   end
 
-  subgraph Future["Future (post-V1)"]
-    DB[("Persistence:\nsessions / messages")]
+  subgraph Data["Persistence (Python)"]
+    DB[("PostgreSQL:\nsessions / messages / guests")]
+  end
+
+  subgraph PostMVP["Post-MVP (deferred)"]
+    NodeHarden["Node.js hardening"]
   end
 
   UI --> Hook --> Router
@@ -83,7 +101,8 @@ flowchart LR
   Base --> GeminiAdapter --> Gemini
   Base --> GroqAdapter --> Groq
   Base --> AnthropicAdapter --> Anthropic
-  Service -. future .-> DB
+  Service --> DB
+  Node -.-> NodeHarden
 ```
 
 ## Prerequisites
@@ -165,7 +184,8 @@ cd backend-python
 uv run python -m uvicorn app.main:app --reload --port 8000
 uv run python -m ruff check app tests
 uv run pyright app tests
-uv run python -m pytest -q
+uv run python -m ruff format --check app tests
+uv run python -m pytest -q --cov=app --cov-fail-under=80
 ```
 
 ## Developer Onboarding
@@ -219,7 +239,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 | `frontend/`       | ESLint                                | No (requires fix) | < 2s    |
 | `backend-nodejs/` | Prettier format                       | Yes               | < 1s    |
 | `backend-nodejs/` | ESLint                                | No (requires fix) | < 2s    |
-| `backend-python/` | Ruff check, Black format, Pyright     | Ruff/Black only   | < 10s   |
+| `backend-python/` | Ruff check, Ruff format, Pyright | Ruff only   | < 10s   |
 | Shared            | Trailing whitespace, YAML/JSON syntax | Yes               | < 1s    |
 
 **Total typical runtime: < 5 seconds per commit**
@@ -230,7 +250,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 
 **Fast hooks (run on every commit):**
 
-- Formatting checks (Prettier, Black)
+- Formatting checks (Prettier, Ruff format)
 - Linting checks (ESLint, Ruff)
 - Type checking (Pyright for Python backend)
 - File validation (trailing whitespace, JSON/YAML syntax)
@@ -242,7 +262,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 - Build validation (see `npm run build`, `make build`)
 - **Why:** Reserve CI resources for comprehensive validation; developer commits should be fast
 
-PR CI for `backend-python/` also runs `make typecheck` (Pyright) alongside lint and tests.
+PR CI for `backend-python/` runs `make lint`, `make format-check`, `make typecheck`, and `make test-cov`.
 
 #### Bypass Policy
 
@@ -280,7 +300,7 @@ PR CI for `backend-python/` also runs `make typecheck` (Pyright) alongside lint 
 | `prettier not found`            | Node dependencies missing          | `npm install` in `frontend/` or `backend-nodejs/`     |
 | `eslint not found`              | Node dependencies missing          | `npm install` in `frontend/` or `backend-nodejs/`     |
 | `ruff not found`                | Python dependencies missing        | `uv sync` in `backend-python/`                        |
-| `black not found`               | Python dependencies missing        | `uv sync` in `backend-python/`                        |
+| `ruff format` issues           | Python dependencies missing        | `uv sync` in `backend-python/`                        |
 | `pyright not found`             | Python dependencies missing        | `uv sync` in `backend-python/`                        |
 | Hooks timeout (> 20s)           | Large diff or missing dependencies | Check dependency installation, try smaller commits    |
 | Hooks modify files unexpectedly | Auto-fix hooks reformatting code   | Re-stage auto-fixed files after hook run, then commit |
@@ -293,7 +313,7 @@ PR CI for `backend-python/` also runs `make typecheck` (Pyright) alongside lint 
 | Ruff check failures        | Run `cd backend-python && uv run ruff check --fix app tests`, then re-stage |
 | Pyright type errors        | Fix reported types; verify with `cd backend-python && make typecheck`       |
 | Prettier disagreement      | Re-run `pre-commit run --all-files` to auto-fix, then re-stage              |
-| Black formatting diff      | Re-run `pre-commit run --all-files` to auto-fix, then re-stage              |
+| Ruff format diff           | Run `cd backend-python && make format`, then re-stage                       |
 
 #### Getting Help
 
@@ -342,9 +362,18 @@ Each image build also uploads a metadata artifact (service, ref, sha, digest, ta
 
 Required checks:
 
-- `Frontend PR Checks`
-- `Backend Node.js PR Checks`
-- `Backend Python PR Checks`
+- `Frontend PR Checks` — lint, format check, test, build
+- `Backend Node.js PR Checks` — lint, format check, test, build
+- `Backend Python PR Checks` — lint, format check, typecheck (Pyright standard), test with coverage (80% minimum on `app/`)
+
+`Backend Python PR Checks` runs, in order:
+
+1. `make lint` — Ruff
+2. `make format-check` — Ruff format
+3. `make typecheck` — Pyright (`typeCheckingMode = standard`)
+4. `make test-cov` — pytest with `--cov-fail-under=80` (baseline ~89%; `app/db/seed.py` omitted as a CLI entrypoint)
+
+CI uploads `backend-python/coverage.xml` as a workflow artifact on Python PRs.
 
 Merge policy:
 
@@ -372,9 +401,9 @@ Use `8000` for Python and `8001` for Node during side-by-side development.
 
 ## Provider Switching
 
-In either backend env file:
+In the Python backend env file (`backend-python/.env`; see `.env.example` for the full list):
 
-- `LLM_PROVIDER=openai` or `LLM_PROVIDER=gemini`
+- `LLM_PROVIDER=openai`, `gemini`, `groq`, or `anthropic`
 - set provider-specific key/model values
 
 Examples:
@@ -448,6 +477,7 @@ make typecheck
 make format
 make format-check
 make test
+make test-cov
 uv run pytest
 ```
 
@@ -474,36 +504,32 @@ npm run build
 npm test -- --run
 ```
 
-## Reliability Notes
+## Reliability and Observability
 
-- Non-streaming failures return a standard JSON error envelope with codes such as `validation_error`, `provider_timeout`, `provider_rate_limited`, `provider_error`, and `internal_error`.
-- Streaming failures surface as SSE `error` frames with the same error codes.
+- Every response includes `X-Request-ID`; the frontend forwards it on retry for traceability.
+- Non-streaming failures return `{ error: { code, message, request_id } }`.
+- Streaming failures surface as SSE `error` frames with the same codes.
+- HTTP rate limiting returns `429` with `rate_limit_exceeded` and a `Retry-After` header (separate from guest daily quota).
+- Production logs are structured JSON with correlation fields; development logs are human-readable.
 - The frontend preserves partial assistant output on interruption, marks the message as interrupted, and offers Retry.
 - Oversized or malformed requests are rejected before hitting the provider.
 
+Common error codes: `validation_error`, `invalid_google_token`, `quota_exceeded`, `rate_limit_exceeded`, `provider_timeout`, `provider_rate_limited`, `provider_error`, `database_error`, `internal_error`.
+
 ## Tests
 
-Backend coverage includes:
+| App | Command | Baseline (2026-07-19) |
+| --- | ------- | --------------------- |
+| Python | `cd backend-python && make test-cov` | 167 passed, 89% coverage |
+| Frontend | `cd frontend && npm test -- --run` | 90 passed |
+| Node.js | `cd backend-nodejs && npm test` | 26 passed (baseline, unhardened) |
 
-- health endpoint
-- non-streaming chat success and error normalization
-- streaming SSE frame sequencing and cancellation behavior
-- provider adapter coverage for OpenAI and Gemini
-- env-driven provider selection and request-level provider overrides
-
-Frontend coverage includes:
-
-- SSE parser behavior across chunk boundaries
-- reducer state transitions
-- composer-driven streaming and Stop behavior
-
-Recommended validation commands:
+Recommended pre-push validation:
 
 ```bash
-cd backend-python && uv run pytest && make typecheck
-cd backend-nodejs && npm test
-cd frontend && npm test -- --run
-cd frontend && npm run build
+cd backend-python && make lint && make format-check && make typecheck && make test-cov
+cd frontend && npm run lint && npm run format:check && npm test -- --run && npm run build
+cd backend-nodejs && npm run lint && npm run format:check && npm test && npm run build
 ```
 
 ## Side-By-Side Workflow

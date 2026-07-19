@@ -1,7 +1,13 @@
 /* @vitest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sendChat, streamChat } from './chatClient'
+import {
+  getLastRequestId,
+  sendChat,
+  setRetryRequestId,
+  streamChat,
+  REQUEST_ID_HEADER,
+} from './chatClient'
 import { getStoredGuestToken, storeGuestToken, storeSession } from '../auth/tokenStorage'
 import type { AuthenticatedUser } from '../types/auth'
 
@@ -169,5 +175,54 @@ describe('chatClient guest-token wiring', () => {
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>
     expect(headers['X-Guest-Token']).toBe('guest-xyz')
     expect(getStoredGuestToken()).toBe('new-minted-token')
+  })
+})
+
+describe('chatClient request-id retry wiring', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    window.localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('forwards X-Request-ID on the next request after setRetryRequestId', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            id: 'resp_1',
+            role: 'assistant',
+            content: 'partial',
+            model: 'gpt-4o-mini',
+            provider: 'openai',
+            created_at: 't0',
+          },
+          { [REQUEST_ID_HEADER]: '6ba7b810-9dad-11d1-80b4-00c04fd430c8' },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: 'resp_2',
+          role: 'assistant',
+          content: 'retry ok',
+          model: 'gpt-4o-mini',
+          provider: 'openai',
+          created_at: 't1',
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendChat({ messages: [{ role: 'user', content: 'hi' }] })
+    expect(getLastRequestId()).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
+
+    setRetryRequestId(getLastRequestId())
+    await sendChat({ messages: [{ role: 'user', content: 'hi again' }] })
+
+    const retryHeaders = fetchMock.mock.calls[1][1].headers as Record<string, string>
+    expect(retryHeaders[REQUEST_ID_HEADER]).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
   })
 })

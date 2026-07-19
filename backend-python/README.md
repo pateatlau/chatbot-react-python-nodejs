@@ -1,15 +1,18 @@
 # Python AI Service
 
-FastAPI backend for the chatbot project.
+**Production MVP backend** — FastAPI service deployed to Railway.
 
-Current backend scope includes Phase 7-10 work:
+MVP hardening is complete (2026-07-19): structured logging, correlation IDs, centralized errors, HTTP rate limiting, Pyright standard mode, and CI quality gates. See `docs/plans/mvp-completion-implementation-plan.md` for the validation record.
 
-- typed non-streaming error envelopes
-- typed streaming SSE error frames
-- provider timeout normalization
-- request-size and schema validation
-- Gemini, Groq, and Anthropic provider integration behind the shared provider interface
-- automated endpoint and provider tests
+## Capabilities
+
+- Multi-provider chat (OpenAI, Gemini, Groq, Anthropic) — streaming and non-streaming
+- Google OAuth login with app-issued JWT; guest identity and daily quota
+- Chat persistence (sessions, messages, usage) when `CHAT_PERSISTENCE_ENABLED=true`
+- Typed error envelopes and SSE error frames with `request_id`
+- Request-size and schema validation; provider timeout normalization
+- Structured JSON logging in production; correlation IDs on every response
+- HTTP rate limiting (per-minute) with `Retry-After` on 429
 
 ## Tech Stack
 
@@ -21,21 +24,23 @@ Current backend scope includes Phase 7-10 work:
 - Groq SDK
 - Anthropic SDK
 
-Dev tooling: Ruff (lint), Black (format), Pyright (static type checking), pytest
+Dev tooling: Ruff (lint and format), Pyright (static type checking, standard mode), pytest, pytest-cov
 
 ## Layout
 
-- `app/main.py` - app creation, CORS, router wiring
-- `app/core/config.py` - environment-driven settings
-- `app/routers/health.py` - `GET /api/health`
-- `app/routers/chat.py` - `POST /api/chat`, `POST /api/chat/stream`
-- `app/services/chat_service.py` - orchestration, SSE framing
-- `app/providers/base.py` - provider protocol
-- `app/providers/openai_provider.py` - OpenAI adapter
-- `app/providers/gemini_provider.py` - Gemini adapter
-- `app/providers/factory.py` - provider selection
-- `app/schemas/chat.py` - request/response/frame schemas
-- `tests/` - test doubles and provider tests
+- `app/main.py` — app creation, middleware (CORS, rate limit, logging, correlation ID)
+- `app/core/config.py` — environment-driven settings with startup validation
+- `app/core/logging.py` — structured logging (JSON in production)
+- `app/core/errors.py` — centralized error envelope and exception handlers
+- `app/middleware/correlation_id.py` — `X-Request-ID` propagation
+- `app/middleware/rate_limit.py` — in-memory sliding-window rate limits
+- `app/routers/health.py` — `GET /api/health`, `GET /api/health/ready`
+- `app/routers/auth.py` — `POST /api/auth/google`
+- `app/routers/chat.py` — chat endpoints and session APIs
+- `app/services/chat_service.py` — orchestration, SSE framing, persistence
+- `app/providers/` — provider adapters and factory
+- `app/schemas/` — request/response/frame schemas
+- `tests/` — unit and integration tests (167 tests, ~89% coverage on `app/`)
 
 ## Setup
 
@@ -75,6 +80,7 @@ make typecheck
 make format
 make format-check
 make test
+make test-cov
 ```
 
 These Make targets run through `uv run ...` so commands always resolve from the project virtual environment and not from any global Python/Conda PATH entries.
@@ -92,14 +98,17 @@ On native Windows, `make` is not installed by default.
 uv run python -m uvicorn app.main:app --reload --port 8000
 uv run python -m ruff check app tests
 uv run pyright app tests
-uv run python -m black app tests
-uv run python -m black --check app tests
-uv run python -m pytest -q
+uv run python -m ruff format app tests
+uv run python -m ruff format --check app tests
+uv run python -m pytest -q --cov=app --cov-report=term-missing:skip-covered
+uv run python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
 ```
 
 ## Type Checking
 
-Static analysis is enforced with [Pyright](https://github.com/microsoft/pyright), configured in `pyproject.toml` under `[tool.pyright]`. The project uses `typeCheckingMode = "basic"` for `app/` and `tests/`.
+Static analysis is enforced with [Pyright](https://github.com/microsoft/pyright), configured in `pyproject.toml` under `[tool.pyright]`. The project uses `typeCheckingMode = "standard"` for `app/` and `tests/`.
+
+Formatting uses [Ruff format](https://docs.astral.sh/ruff/formatter/) (`line-length = 88`, `target-version = py312`), configured under `[tool.ruff]` in the same file. CI runs `make format-check` on every Python PR.
 
 Pyright aligns with the Pylance language server in Cursor/VS Code, so local editor diagnostics and CI should report the same issues.
 
@@ -108,6 +117,8 @@ make typecheck
 # or
 uv run pyright app tests
 ```
+
+Coverage is configured in `pyproject.toml` under `[tool.coverage]`. Source is `app/`; `app/db/seed.py` is omitted (CLI entrypoint).
 
 ## Run
 
@@ -131,8 +142,17 @@ ANTHROPIC_API_KEY=...
 ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 APP_ENV=development
+LOG_LEVEL=INFO
 MAX_MESSAGE_LENGTH=4000
 REQUEST_TIMEOUT_SECONDS=30
+REQUEST_BODY_LIMIT_BYTES=16384
+RATE_LIMIT_ANONYMOUS_PER_MINUTE=30
+RATE_LIMIT_AUTHENTICATED_PER_MINUTE=120
+DATABASE_URL=postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot
+GOOGLE_CLIENT_ID=...
+JWT_SECRET=...
+GUEST_DAILY_MESSAGE_QUOTA=20
+CHAT_PERSISTENCE_ENABLED=true
 ```
 
 Additional behavior tied to these settings:
@@ -142,8 +162,13 @@ Additional behavior tied to these settings:
 - `GEMINI_MODEL` defaults to `gemini-3.1-flash-lite`
 - `GROQ_MODEL` defaults to `openai/gpt-oss-20b`
 - `ANTHROPIC_MODEL` defaults to `claude-haiku-4-5-20251001`
+- `LOG_LEVEL` controls root logger verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `REQUEST_BODY_LIMIT_BYTES` caps incoming JSON body size (default 16384, aligned with Node)
 - `REQUEST_TIMEOUT_SECONDS` caps provider completion and stream iteration time
+- `RATE_LIMIT_ANONYMOUS_PER_MINUTE` / `RATE_LIMIT_AUTHENTICATED_PER_MINUTE` — HTTP per-minute limits (default 30 / 120)
 - `CORS_ALLOWED_ORIGINS` must include the deployed frontend origin in non-local environments
+- When `APP_ENV` is not `development`, startup fails fast unless `JWT_SECRET`, `DATABASE_URL`, and `GOOGLE_CLIENT_ID` are explicitly set
+- In `development`, insecure defaults emit startup warnings instead of failing
 
 ## Provider Selection
 
@@ -159,6 +184,12 @@ Additional behavior tied to these settings:
 - `POST /api/chat` - non-streaming completion
 - `POST /api/chat/stream` - SSE streaming completion
 
+## Observability
+
+- **Logging:** JSON in production (`APP_ENV=production`), readable text in development. Fields include `request_id`, route, method, status, latency, provider, and model. Sensitive values are redacted.
+- **Correlation IDs:** Every response includes `X-Request-ID`. Pass the header on inbound requests to continue a trace.
+- **Rate limiting:** Anonymous callers (IP or guest token bucket) and authenticated callers (JWT bucket) have separate per-minute limits. `/api/health` and `/api/health/ready` are exempt.
+
 ## Error Behavior
 
 Non-streaming errors return:
@@ -167,17 +198,23 @@ Non-streaming errors return:
 {
   "error": {
     "code": "provider_error",
-    "message": "Upstream provider failed."
+    "message": "Upstream provider failed.",
+    "request_id": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
 ```
 
+Error responses include the `X-Request-ID` header matching `error.request_id`.
+
 Known backend error codes:
 
 - `validation_error`
-- `provider_timeout`
-- `provider_rate_limited`
-- `provider_error`
+- `invalid_google_token`, `invalid_access_token`, `auth_not_configured`
+- `provider_not_allowed`, `session_not_found`
+- `quota_exceeded` — guest daily message limit (business logic)
+- `rate_limit_exceeded` — HTTP per-minute limit (middleware; includes `Retry-After`)
+- `provider_timeout`, `provider_rate_limited`, `provider_error`
+- `database_error`
 - `internal_error`
 
 For `/api/chat/stream`, those errors are emitted as SSE `error` frames after the stream starts.
@@ -206,30 +243,19 @@ curl -N -X POST http://localhost:8000/api/chat/stream \
 ## Tests
 
 ```bash
-make test
+make test       # pytest with coverage report (no threshold)
+make test-cov   # enforce 80% minimum on app/ (matches CI)
 ```
 
-Gemini provider-focused test:
+CI and local quality gates:
 
 ```bash
-uv run pytest -q tests/providers/test_gemini_provider.py
+make lint && make format-check && make typecheck && make test-cov
 ```
 
-Full backend validation:
+Current suite (2026-07-19): **167 passed**, **~89%** coverage on `app/`.
 
-```bash
-uv run python -m pytest
-uv run python -m ruff check app tests
-uv run pyright app tests
-```
-
-Current backend tests cover:
-
-- `GET /api/health`
-- `POST /api/chat` success path
-- `POST /api/chat` validation and provider-error paths
-- `POST /api/chat/stream` happy path, provider error, and client disconnect behavior
-- Gemini, Groq, and Anthropic provider completion/streaming behavior and env-driven provider selection
+Coverage includes health, auth, chat (streaming and non-streaming), persistence, logging, correlation IDs, errors, rate limiting, and provider adapters (OpenAI, Gemini, Groq, Anthropic).
 
 ## Manual Smoke Checklist
 

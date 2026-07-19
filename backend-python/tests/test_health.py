@@ -70,7 +70,7 @@ async def test_cors_exposes_guest_token_header_for_allowed_origin() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-expose-headers"] == (
-        "X-Guest-Token, X-Guest-Quota-Remaining"
+        "X-Guest-Token, X-Guest-Quota-Remaining, X-Request-ID"
     )
     assert response.headers["access-control-allow-origin"] == allowed_origin
     assert "access-control-allow-credentials" not in response.headers

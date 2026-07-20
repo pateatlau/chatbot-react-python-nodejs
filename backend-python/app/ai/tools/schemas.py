@@ -1,0 +1,44 @@
+"""Pydantic schemas for the tool execution platform."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from app.core.caller import CallerContext
+
+
+class ToolDefinition(BaseModel):
+    """Registered tool metadata exposed to callers and LLM function-calling APIs."""
+
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class ToolCall(BaseModel):
+    """A parsed tool invocation (from an LLM response or test fixture)."""
+
+    name: str
+    arguments: dict[str, object] = Field(default_factory=dict)
+    call_id: str | None = None
+
+
+class ToolResult(BaseModel):
+    """Normalized tool execution envelope for all success and failure paths."""
+
+    success: bool
+    data: object | None = None
+    error: str | None = None
+    error_code: str | None = None
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class ToolExecutionContext(BaseModel):
+    """Portable execution context for authorization and structured logging."""
+
+    caller: CallerContext
+    request_id: str | None = None
+
+    model_config = {"arbitrary_types_allowed": True}

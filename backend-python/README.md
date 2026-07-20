@@ -81,6 +81,31 @@ content = get_prompt_manager().render(
 
 All template variables are **required** — missing keys raise `PromptRenderError` (Jinja2 `StrictUndefined`). Regression snapshots and edge-case fixtures are in `tests/test_prompt_manager.py` and `tests/data/prompts/`.
 
+### Tool Platform (Phase 3)
+
+Generic tool lifecycle (no production tools registered at startup in Phase 3):
+
+```text
+Registry → Validation → Authorization → Execution → Normalization
+```
+
+LLM integration and web search arrive in Phase 4.
+
+| Stage | Component | Responsibility |
+| ----- | --------- | -------------- |
+| Registry | `ToolRegistry` | Register, lookup, list tools; expose OpenAI-compatible schemas |
+| Validation | `ToolValidator` | Validate call args against tool JSON Schema |
+| Authorization | `ToolAuthorizer` | V1: authenticated users only; guests receive `forbidden` |
+| Execution | `ToolExecutor` | Orchestrate lifecycle with timeout, logging, error normalization |
+
+Wire via DI:
+
+```python
+from app.ai.deps import get_tool_registry, get_tool_executor
+```
+
+Unit tests register the stub **`echo`** tool in fixtures only (`tests/test_tool_platform.py`). Structured log counters: `tool_calls_total` (every invocation) and `tool_errors_total` (failures). Tool arguments are never logged.
+
 ### Module boundaries
 
 | Layer | Location | Responsibility |

@@ -42,7 +42,7 @@ class TavilySearchClient:
         self,
         *,
         api_key: str,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 10.0,
     ) -> None:
         self._api_key = api_key
         self._timeout = timeout_seconds

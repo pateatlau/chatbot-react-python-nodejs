@@ -286,7 +286,7 @@ class ToolChatService:
                     }
                 )
 
-            if guest_denied and caller is not None and caller.kind == "guest":
+            if guest_denied and (caller is None or caller.kind == "guest"):
                 return ProviderCompletion(
                     content=_GUEST_TOOL_DENIED_MESSAGE,
                     finish_reason="stop",
@@ -325,7 +325,7 @@ class ToolChatService:
         tool_call: ProviderToolCall,
         caller: CallerContext | None,
     ) -> tuple[str, bool]:
-        if caller is None:
+        if caller is None or caller.kind == "guest":
             payload = {
                 "success": False,
                 "error": _GUEST_TOOL_DENIED_MESSAGE,

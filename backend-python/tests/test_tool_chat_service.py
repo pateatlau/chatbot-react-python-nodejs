@@ -212,6 +212,46 @@ async def test_guest_tool_call_returns_graceful_message(
 
 
 @pytest.mark.anyio
+async def test_unauthenticated_caller_denied_when_tools_registered(
+    tool_registry: ToolRegistry,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    provider = FakeProvider(
+        tool_completions=[
+            ProviderToolCompletion(
+                content=None,
+                tool_calls=[
+                    ProviderToolCall(
+                        id="call-anon",
+                        name="web_search",
+                        arguments={"query": "news"},
+                    )
+                ],
+                finish_reason="tool_calls",
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        ProviderFactory,
+        "get_provider",
+        staticmethod(lambda name=None, settings=None: provider),
+    )
+    service = _build_service(provider=provider, registry=tool_registry)
+
+    response = await service.complete_chat(
+        ChatRequestSchema(
+            messages=[ChatMessageSchema(role="user", content="Search the web")],
+            provider="openai",
+            model="gpt-4o-mini",
+        ),
+        None,
+    )
+
+    assert response.content == _GUEST_TOOL_DENIED_MESSAGE
+    assert provider.tool_completion_calls == 1
+
+
+@pytest.mark.anyio
 async def test_no_tools_registered_falls_back_to_standard_completion(
     monkeypatch: MonkeyPatch,
 ) -> None:

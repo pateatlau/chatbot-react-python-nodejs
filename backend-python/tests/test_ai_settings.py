@@ -62,6 +62,31 @@ def test_rag_enabled_rejects_unsupported_embedding_provider() -> None:
         settings.validate_startup()
 
 
+def test_rag_enabled_rejects_chunk_overlap_greater_than_or_equal_to_chunk_size() -> (
+    None
+):
+    settings = Settings(
+        llm_provider="openai",
+        openai_api_key="sk-placeholder",
+        rag_enabled=True,
+        chunk_size=1000,
+        chunk_overlap=1000,
+    )
+    with pytest.raises(ValueError, match="CHUNK_OVERLAP must be less than CHUNK_SIZE"):
+        settings.validate_startup()
+
+
+def test_rag_disabled_skips_chunk_boundary_validation() -> None:
+    settings = Settings(
+        llm_provider="openai",
+        openai_api_key="sk-placeholder",
+        rag_enabled=False,
+        chunk_size=1000,
+        chunk_overlap=1000,
+    )
+    settings.validate_startup()
+
+
 def test_tools_enabled_requires_web_search_api_key() -> None:
     settings = Settings(
         llm_provider="openai",

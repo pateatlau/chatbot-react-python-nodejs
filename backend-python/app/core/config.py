@@ -205,6 +205,12 @@ class Settings(BaseSettings):
                 "Set it in backend-python/.env (see .env.example)."
             )
 
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                "CHUNK_OVERLAP must be less than CHUNK_SIZE when RAG_ENABLED is true. "
+                f"Got CHUNK_OVERLAP={self.chunk_overlap}, CHUNK_SIZE={self.chunk_size}."
+            )
+
     def validate_tools_requirements(self) -> None:
         """Fail fast when tools are enabled but web search is not configured."""
         if not self.tools_enabled:

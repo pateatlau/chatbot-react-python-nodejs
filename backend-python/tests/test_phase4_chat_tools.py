@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -9,15 +10,17 @@ from httpx import ASGITransport, AsyncClient
 from pytest import MonkeyPatch
 
 from app.ai.deps import get_tool_registry
-from app.ai.tools.registration import register_production_tools
-from app.core.config import Settings, get_settings
-from app.main import app
-from app.providers.base import ProviderToolCall, ProviderToolCompletion
-from app.providers.factory import ProviderFactory
 from app.ai.tools.implementations.web_search import (
     WEB_SEARCH_TOOL_NAME,
     WebSearchResult,
 )
+from app.ai.tools.registration import register_production_tools
+from app.core.caller import CallerContext
+from app.core.config import Settings, get_settings
+from app.main import app
+from app.providers.base import ProviderToolCall, ProviderToolCompletion
+from app.providers.factory import ProviderFactory
+from app.routers.chat import get_optional_caller
 from tests.fakes import FakeProvider
 
 
@@ -28,6 +31,7 @@ def _clear_settings_and_registry() -> Iterator[None]:
     yield
     get_settings.cache_clear()
     get_tool_registry.cache_clear()
+    app.dependency_overrides.clear()
 
 
 def _mock_provider_factory(provider: FakeProvider):
@@ -104,6 +108,11 @@ async def test_tools_enabled_non_streaming_invokes_tool_loop(
         "get_provider",
         _mock_provider_factory(fake_provider),
     )
+
+    async def _authenticated_caller() -> CallerContext:
+        return CallerContext.for_user(uuid.uuid4())
+
+    app.dependency_overrides[get_optional_caller] = _authenticated_caller
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"

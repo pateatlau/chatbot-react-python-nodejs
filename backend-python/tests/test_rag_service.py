@@ -259,6 +259,42 @@ async def test_rag_service_orchestration_order() -> None:
 
 
 @pytest.mark.anyio
+async def test_rag_service_allows_prompts_longer_than_chat_max_message_length() -> None:
+    """RAG context can exceed chat max_message_length without failing assembly."""
+    long_prompt = "x" * 5000
+
+    chunks = [_chunk(index=0, content="chunk", score=0.9)]
+    embed = AsyncMock()
+    embed.embed_texts = AsyncMock(return_value=[[0.1]])
+    store = AsyncMock()
+    store.similarity_search = AsyncMock(return_value=chunks)
+    settings = _settings(max_message_length=4000)
+    retriever = Retriever(
+        embedding_provider=embed,
+        vector_store=store,
+        settings=settings,
+    )
+    prompt_builder = MagicMock(spec=PromptBuilder)
+    prompt_builder.build.return_value = BuiltPrompt(
+        system_prompt=None,
+        user_prompt=long_prompt,
+    )
+    llm = _CapturingLLMProvider()
+    service = RAGService(
+        retriever=retriever,
+        context_builder=ContextBuilder(settings),
+        prompt_builder=prompt_builder,
+        llm_provider=llm,
+        settings=settings,
+    )
+
+    response = await service.ask(user_id=uuid.uuid4(), question="Summarize the PDF")
+
+    assert response.answer == "Answer from LLM."
+    assert len(llm.messages[0].content) == 5000
+
+
+@pytest.mark.anyio
 async def test_rag_service_empty_retrieval_skips_llm() -> None:
     embed = AsyncMock()
     embed.embed_texts = AsyncMock(return_value=[[0.1]])

@@ -11,9 +11,9 @@ request-scoped dependencies follow the same pattern as ``app/db/deps.py``.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.documents.pipeline import IngestionPipeline
 from app.ai.prompts.manager import PromptManager, create_prompt_manager
@@ -26,9 +26,6 @@ from app.ai.tools.registry import ToolRegistry
 from app.core.config import Settings, get_settings
 from app.db.session import get_db_session
 from app.services.document_service import DocumentService
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def get_ai_settings(

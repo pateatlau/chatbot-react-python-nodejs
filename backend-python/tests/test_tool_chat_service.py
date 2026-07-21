@@ -19,9 +19,10 @@ from app.ai.tools.registry import ToolRegistry
 from app.core.caller import CallerContext
 from app.core.config import Settings
 from app.providers.base import ProviderToolCall, ProviderToolCompletion
+from app.providers.capabilities import ProviderCapabilities, get_capabilities
 from app.providers.factory import ProviderFactory
 from app.schemas.chat import ChatMessageSchema, ChatRequestSchema
-from app.services.chat_service import ChatService
+from app.services.chat_service import ChatService, ChatServiceError
 from app.services.tool_chat_service import ToolChatService, _GUEST_TOOL_DENIED_MESSAGE
 from tests.fakes import FakeProvider
 
@@ -338,6 +339,55 @@ async def test_unauthenticated_caller_denied_when_tools_registered(
 
     assert response.content == _GUEST_TOOL_DENIED_MESSAGE
     assert provider.tool_completion_calls == 1
+
+
+@pytest.mark.anyio
+async def test_unsupported_provider_returns_validation_error(
+    tool_registry: ToolRegistry,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    provider = FakeProvider("Should not be reached")
+    monkeypatch.setattr(
+        ProviderFactory,
+        "get_provider",
+        staticmethod(lambda name=None, settings=None: provider),
+    )
+
+    def _unsupported_capabilities(name: str) -> ProviderCapabilities:
+        caps = get_capabilities(name)  # type: ignore[arg-type]
+        if name == "openai":
+            return ProviderCapabilities(
+                supports_streaming=caps.supports_streaming,
+                supports_tool_calling=False,
+                supports_json_mode=caps.supports_json_mode,
+                supports_reasoning=caps.supports_reasoning,
+                supports_image_input=caps.supports_image_input,
+                supports_image_output=caps.supports_image_output,
+                supports_audio=caps.supports_audio,
+                supports_embeddings=caps.supports_embeddings,
+            )
+        return caps
+
+    monkeypatch.setattr(
+        "app.services.tool_chat_service.get_capabilities",
+        _unsupported_capabilities,
+    )
+    service = _build_service(provider=provider, registry=tool_registry)
+    caller = CallerContext.for_user(uuid.uuid4())
+
+    with pytest.raises(ChatServiceError) as exc_info:
+        await service.complete_chat(
+            ChatRequestSchema(
+                messages=[ChatMessageSchema(role="user", content="Search the web")],
+                provider="openai",
+                model="gpt-4o-mini",
+            ),
+            caller,
+        )
+
+    assert exc_info.value.code == "validation_error"
+    assert "not supported for provider 'openai'" in exc_info.value.message
+    assert provider.tool_completion_calls == 0
 
 
 @pytest.mark.anyio

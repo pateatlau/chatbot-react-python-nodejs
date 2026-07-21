@@ -26,6 +26,7 @@ from app.providers.base import (
     ProviderToolCall,
     ProviderToolCompletion,
 )
+from app.providers.capabilities import get_capabilities
 from app.schemas.chat import (
     ChatMessageSchema,
     ChatRequestSchema,
@@ -239,6 +240,15 @@ class ToolChatService:
                 model,
                 provider_name,
                 event="Chat completion (no tools registered)",
+            )
+
+        if not get_capabilities(provider_name).supports_tool_calling:
+            raise ChatServiceError(
+                code="validation_error",
+                message=(
+                    f"Tool calling is not supported for provider '{provider_name}'."
+                ),
+                status_code=422,
             )
 
         loop_messages = self._build_loop_messages(request.messages)

@@ -464,6 +464,7 @@ async def test_chat_both_toggles_together(
 @pytest.mark.anyio
 async def test_chat_guest_toggles_rejected(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("TOOLS_ENABLED", "true")
+    monkeypatch.setenv("WEB_SEARCH_API_KEY", "test-tavily-key")
     monkeypatch.setenv("RAG_ENABLED", "true")
     get_settings.cache_clear()
     fake_provider = FakeProvider("Should not run")

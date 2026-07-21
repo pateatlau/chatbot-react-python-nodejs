@@ -245,7 +245,44 @@ Question → Retriever → ContextBuilder → PromptBuilder → LLM → RAGRespo
 | Enterprise Knowledge Assistant | Internal docs | Enterprise prompt template | App service with org scoping |
 | Legal / HR / Community Service | Domain corpus | Domain prompt template | Matching app service |
 
-Business knowledge lives in **documents** and **prompt templates**; framework code stays domain-agnostic. HTTP endpoints (`POST /api/rag/ask`) arrive in Phase 11.
+Business knowledge lives in **documents** and **prompt templates**; framework code stays domain-agnostic. HTTP exposure is documented in **Knowledge and RAG API (Phase 11)** below.
+
+### Knowledge and RAG API (Phase 11)
+
+Auth-only REST endpoints for document management and generic RAG. Guests receive **401** on all routes below.
+
+| Method | Path | Auth | Purpose |
+| ------ | ---- | ---- | ------- |
+| POST | `/api/documents/upload` | Bearer JWT | Upload and synchronously ingest a document |
+| GET | `/api/documents` | Bearer JWT | List caller's documents (newest first) |
+| GET | `/api/documents/{id}` | Bearer JWT | Document metadata and status |
+| DELETE | `/api/documents/{id}` | Bearer JWT | Delete document and vectors |
+| POST | `/api/rag/ask` | Bearer JWT | Generic RAG question → answer |
+
+**Upload limits:** `DOCUMENT_UPLOAD_MAX_BYTES` (default 10 MB) applies only to `/api/documents/upload`. Chat and auth routes still use the global `REQUEST_BODY_LIMIT_BYTES` (16 KB).
+
+**RAG feature flag:** set `RAG_ENABLED=true` for `/api/rag/ask`; otherwise the endpoint returns **503** with code `feature_disabled`. Document upload/list/delete work independently of `RAG_ENABLED`.
+
+**CORS:** `DELETE` is allowed for browser-based document removal in Phase 12.
+
+Example requests (replace `$TOKEN` with a bearer JWT from `POST /api/auth/google`):
+
+```bash
+# Upload
+curl -X POST http://localhost:8000/api/documents/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@sample.pdf"
+
+# List
+curl http://localhost:8000/api/documents \
+  -H "Authorization: Bearer $TOKEN"
+
+# Ask (requires RAG_ENABLED=true)
+curl -X POST http://localhost:8000/api/rag/ask \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Summarize my uploaded documents."}'
+```
 
 ### Evaluation framework (Phase 10)
 
@@ -478,7 +515,7 @@ Additional behavior tied to these settings:
 - When `APP_ENV` is not `development`, startup fails fast unless `JWT_SECRET`, `DATABASE_URL`, and `GOOGLE_CLIENT_ID` are explicitly set
 - In `development`, insecure defaults emit startup warnings instead of failing
 - `RAG_ENABLED` / `TOOLS_ENABLED` default to `false`; enabling either requires the corresponding secrets at startup
-- `DOCUMENT_UPLOAD_MAX_BYTES` (default 10 MB) is configured now; HTTP enforcement on `/api/documents/upload` arrives in Phase 11
+- `DOCUMENT_UPLOAD_MAX_BYTES` (default 10 MB) is enforced on `POST /api/documents/upload` (see Knowledge and RAG API section)
 
 ## Provider Selection
 

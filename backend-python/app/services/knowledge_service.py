@@ -11,6 +11,7 @@ from app.ai.interfaces.vector_store import VectorStore
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.db.documents import SqlDocumentStore
+from app.db.models import Document
 from app.services.document_service import validate_document_upload
 
 _logger = get_logger(__name__)
@@ -97,6 +98,25 @@ class KnowledgeService:
             )
             raise
 
+    async def list_documents(self, user_id: uuid.UUID) -> list[Document]:
+        return await self._store.list_documents_for_user(user_id)
+
+    async def get_document(
+        self,
+        user_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> Document:
+        document = await self._store.get_owned_document(
+            document_id,
+            user_id=user_id,
+        )
+        if document is None:
+            raise KnowledgeServiceError(
+                code="document_not_found",
+                message="Document not found.",
+            )
+        return document
+
     async def delete_document(
         self,
         user_id: uuid.UUID,
@@ -109,8 +129,9 @@ class KnowledgeService:
         if document is None:
             raise KnowledgeServiceError(
                 code="document_not_found",
-                message="Document not found or access denied.",
+                message="Document not found.",
             )
+        await self._vector_store.delete_by_document(document_id)
         await self._store.delete_document(document_id)
         await self._session.flush()
 

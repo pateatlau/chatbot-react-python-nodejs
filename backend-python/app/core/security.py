@@ -54,6 +54,15 @@ class AuthConfigError(AuthError):
         )
 
 
+class AuthenticationRequiredError(AuthError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="authentication_required",
+            message="Authentication is required for this endpoint.",
+            status_code=401,
+        )
+
+
 def create_access_token(*, user_id: uuid.UUID, settings: Settings) -> str:
     """Issue a signed app JWT with ``sub = user_id`` and an expiry (Section 3.2)."""
     now = datetime.datetime.now(datetime.timezone.utc)

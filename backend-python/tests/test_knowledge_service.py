@@ -166,7 +166,12 @@ def test_knowledge_service_has_no_search_method() -> None:
         )
         if not name.startswith("_")
     ]
-    assert set(public_methods) == {"delete_document", "ingest_document"}
+    assert set(public_methods) == {
+        "delete_document",
+        "get_document",
+        "ingest_document",
+        "list_documents",
+    }
 
 
 @pytest.mark.anyio

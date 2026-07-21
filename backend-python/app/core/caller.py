@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.security import (
+    AuthenticationRequiredError,
     InvalidAccessTokenError,
     decode_access_token,
     generate_guest_token,
@@ -139,3 +140,12 @@ async def get_current_caller(
             pass  # Fall through to anonymous/guest resolution.
 
     return await resolve_guest_caller(request, SqlGuestStore(session))
+
+
+async def require_authenticated_caller(
+    caller: CallerContext = Depends(get_current_caller),
+) -> CallerContext:
+    """Reject anonymous guests on auth-only document and RAG routes."""
+    if not caller.is_authenticated or caller.user_id is None:
+        raise AuthenticationRequiredError()
+    return caller

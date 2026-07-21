@@ -18,7 +18,7 @@ from app.middleware.correlation_id import (
     correlation_id_middleware,
 )
 from app.middleware.rate_limit import rate_limit_middleware
-from app.routers import auth, chat, health
+from app.routers import auth, chat, documents, health, rag
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -40,7 +40,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins_list,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
     expose_headers=["X-Guest-Token", "X-Guest-Quota-Remaining", REQUEST_ID_HEADER],
 )
@@ -48,6 +48,8 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(documents.router)
+app.include_router(rag.router)
 
 register_exception_handlers(app)
 
@@ -56,12 +58,24 @@ class RequestBodyTooLargeError(Exception):
     pass
 
 
+DOCUMENT_UPLOAD_PATH = "/api/documents/upload"
+
+
 @app.middleware("http")
 async def enforce_request_size(
     request: Request, call_next: RequestResponseEndpoint
 ) -> Response:
-    body_limit = settings.request_body_limit_bytes
-    limit_message = settings.request_body_limit_message()
+    is_document_upload = (
+        request.method == "POST" and request.url.path == DOCUMENT_UPLOAD_PATH
+    )
+    if is_document_upload:
+        body_limit = settings.document_upload_max_bytes
+        limit_message = settings.document_upload_limit_message()
+        limit_code = "document_too_large"
+    else:
+        body_limit = settings.request_body_limit_bytes
+        limit_message = settings.request_body_limit_message()
+        limit_code = "validation_error"
 
     if request.method in {"POST", "PUT", "PATCH"}:
         content_length = request.headers.get("content-length")
@@ -70,7 +84,7 @@ async def enforce_request_size(
                 if int(content_length) > body_limit:
                     return error_response(
                         status_code=413,
-                        code="validation_error",
+                        code=limit_code,
                         message=limit_message,
                     )
             except ValueError:
@@ -99,7 +113,7 @@ async def enforce_request_size(
         except RequestBodyTooLargeError:
             return error_response(
                 status_code=413,
-                code="validation_error",
+                code=limit_code,
                 message=limit_message,
             )
 

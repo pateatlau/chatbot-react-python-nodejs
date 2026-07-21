@@ -120,7 +120,7 @@ class RAGService:
         )
 
         return RAGResponse(
-            answer=completion.content,
+            answer=completion.content or "",
             retrieved_chunks=[
                 _chunk_meta(chunk) for chunk in built_context.included_chunks
             ],
@@ -145,10 +145,23 @@ class RAGService:
         system_prompt: str | None,
         user_prompt: str,
     ) -> list[ChatMessageSchema]:
+        """Build provider messages without API ``max_message_length`` validation.
+
+        RAG prompts include retrieved document context and may exceed the chat
+        request body limit (``max_message_length``). Those limits apply to user
+        input on ``POST /api/chat``, not to server-assembled RAG prompts.
+        """
         messages: list[ChatMessageSchema] = []
         if system_prompt:
-            messages.append(ChatMessageSchema(role="system", content=system_prompt))
-        messages.append(ChatMessageSchema(role="user", content=user_prompt))
+            messages.append(
+                ChatMessageSchema.model_construct(
+                    role="system",
+                    content=system_prompt,
+                )
+            )
+        messages.append(
+            ChatMessageSchema.model_construct(role="user", content=user_prompt)
+        )
         return messages
 
     def _log_request(

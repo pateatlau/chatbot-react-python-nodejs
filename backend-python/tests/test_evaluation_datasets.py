@@ -60,3 +60,19 @@ cases:
 
     with pytest.raises(EvalDatasetError, match="level"):
         load_dataset(path)
+
+
+def test_load_malformed_yaml_raises_eval_dataset_error(tmp_path: Path) -> None:
+    path = tmp_path / "malformed.yaml"
+    path.write_text("cases:\n  - id: [unclosed\n", encoding="utf-8")
+
+    with pytest.raises(EvalDatasetError, match="Failed to parse YAML dataset"):
+        load_dataset(path)
+
+
+def test_load_malformed_json_raises_eval_dataset_error(tmp_path: Path) -> None:
+    path = tmp_path / "malformed.json"
+    path.write_text('{"cases": [', encoding="utf-8")
+
+    with pytest.raises(EvalDatasetError, match="Failed to parse JSON dataset"):
+        load_dataset(path)

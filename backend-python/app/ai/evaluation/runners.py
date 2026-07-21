@@ -221,6 +221,7 @@ class RetrievalEvalRunner:
                 latency_warning=warning,
             )
         except Exception as exc:
+            await self.session.rollback()
             latency_ms = int((time.perf_counter() - start) * 1000)
             return EvalCaseResult(
                 case_id=case.id,
@@ -362,6 +363,7 @@ class EndToEndEvalRunner:
                 latency_warning=warning,
             )
         except Exception as exc:
+            await self.session.rollback()
             latency_ms = int((time.perf_counter() - start) * 1000)
             return EvalCaseResult(
                 case_id=case.id,

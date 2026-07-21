@@ -86,10 +86,20 @@ def _read_dataset_file(path: Path) -> object:
     text = path.read_text(encoding="utf-8")
     suffix = path.suffix.lower()
     if suffix in {".yaml", ".yml"}:
-        loaded = yaml.safe_load(text)
+        try:
+            loaded = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise EvalDatasetError(
+                f"Failed to parse YAML dataset '{path}': {exc}"
+            ) from exc
         return loaded if loaded is not None else {}
     if suffix == ".json":
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise EvalDatasetError(
+                f"Failed to parse JSON dataset '{path}': {exc}"
+            ) from exc
     raise EvalDatasetError(
         f"Unsupported dataset format '{path.suffix}'. Use .yaml, .yml, or .json."
     )

@@ -128,6 +128,61 @@ async def test_retrieval_eval_runner_with_mocked_store(
 
 
 @pytest.mark.anyio
+async def test_retrieval_eval_runner_rolls_back_session_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings()
+    session = AsyncMock()
+    runner = RetrievalEvalRunner(session=session, settings=settings)
+    case = EvalCase(
+        id="failing_retrieval",
+        level="retrieval",
+        question="fixture question",
+    )
+
+    async def failing_create_user(self: RetrievalEvalRunner) -> uuid.UUID:
+        raise RuntimeError("create user failed")
+
+    monkeypatch.setattr(RetrievalEvalRunner, "_create_user", failing_create_user)
+
+    result = await runner.run_case(case)
+
+    assert result.passed is False
+    assert result.error == "create user failed"
+    session.rollback.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_end_to_end_eval_runner_rolls_back_session_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings()
+    session = AsyncMock()
+    runner = EndToEndEvalRunner(
+        session=session,
+        settings=settings,
+        prompt_manager=create_prompt_manager(),
+    )
+    case = EvalCase(
+        id="failing_e2e",
+        level="e2e",
+        question="What is here?",
+        expected_answer="plain text fixture content",
+    )
+
+    async def failing_create(*_args: object, **_kwargs: object) -> MagicMock:
+        raise RuntimeError("create user failed")
+
+    monkeypatch.setattr("app.ai.evaluation.runners.SqlUserStore.create", failing_create)
+
+    result = await runner.run_case(case)
+
+    assert result.passed is False
+    assert result.error == "create user failed"
+    session.rollback.assert_awaited_once()
+
+
+@pytest.mark.anyio
 async def test_end_to_end_eval_runner_with_mocked_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

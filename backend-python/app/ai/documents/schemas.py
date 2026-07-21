@@ -23,3 +23,4 @@ class DocumentChunk:
     chunk_index: int
     content: str
     metadata: dict[str, object] = field(default_factory=dict)
+    embedding: list[float] | None = None

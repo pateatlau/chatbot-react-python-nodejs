@@ -73,6 +73,14 @@ class SqlDocumentStore:
             )
         )
 
+    async def list_documents_for_user(self, user_id: uuid.UUID) -> list[Document]:
+        result = await self._session.scalars(
+            select(Document)
+            .where(Document.user_id == user_id)
+            .order_by(Document.created_at.desc())
+        )
+        return list(result.all())
+
     async def list_chunks(self, document_id: uuid.UUID) -> list[DocumentChunk]:
         result = await self._session.scalars(
             select(DocumentChunk)

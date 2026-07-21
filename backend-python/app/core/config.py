@@ -129,6 +129,13 @@ class Settings(BaseSettings):
             "Reduce message size and retry."
         )
 
+    def document_upload_limit_message(self) -> str:
+        limit = self.document_upload_max_bytes
+        return (
+            f"Document upload exceeds the {limit} byte limit. "
+            "Reduce file size and retry."
+        )
+
     def validate_provider_key(self) -> None:
         """Fail fast if the selected provider's API key is missing."""
         supported_providers = {"openai", "gemini", "groq", "anthropic"}

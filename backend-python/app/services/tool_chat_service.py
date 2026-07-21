@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import cast
 
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
 from app.ai.prompts.manager import PromptManager
+from app.ai.tools.implementations.web_search import WEB_SEARCH_TOOL_NAME
 from app.ai.tools.executor import ToolExecutor
 from app.ai.tools.registry import ToolRegistry
 from app.ai.tools.schemas import ToolCall, ToolExecutionContext
@@ -48,6 +50,8 @@ _GUEST_TOOL_DENIED_MESSAGE = (
     "Please sign in to search the web or ask a question I can answer directly."
 )
 
+ChatActivityCallback = Callable[[str], Awaitable[None]]
+
 
 class ToolChatService:
     """Compose ``ChatService`` with a capped non-streaming tool loop."""
@@ -72,6 +76,7 @@ class ToolChatService:
         self,
         request: ChatRequestSchema,
         caller: CallerContext | None = None,
+        on_activity: ChatActivityCallback | None = None,
     ) -> ChatResponseSchema:
         provider, model, provider_name = self._chat_service._resolve_provider(request)
 
@@ -83,6 +88,7 @@ class ToolChatService:
                     model=model,
                     provider_name=provider_name,
                     caller=caller,
+                    on_activity=on_activity,
                 )
             except NotImplementedError as exc:
                 raise normalize_chat_error(exc) from exc
@@ -144,6 +150,7 @@ class ToolChatService:
                 model=model,
                 provider_name=provider_name,
                 caller=caller,
+                on_activity=on_activity,
             )
         except NotImplementedError as exc:
             app_error = normalize_chat_error(exc)
@@ -222,6 +229,7 @@ class ToolChatService:
         model: str,
         provider_name: ProviderName,
         caller: CallerContext | None,
+        on_activity: ChatActivityCallback | None = None,
     ) -> ProviderCompletion:
         tools = self._tool_registry.get_schemas_for_llm()
         if not tools:
@@ -275,6 +283,7 @@ class ToolChatService:
                 tool_result_content, denied = await self._execute_tool_call(
                     tool_call=tool_call,
                     caller=caller,
+                    on_activity=on_activity,
                 )
                 if denied:
                     guest_denied = True
@@ -324,6 +333,7 @@ class ToolChatService:
         *,
         tool_call: ProviderToolCall,
         caller: CallerContext | None,
+        on_activity: ChatActivityCallback | None = None,
     ) -> tuple[str, bool]:
         if caller is None or caller.kind == "guest":
             payload = {
@@ -333,17 +343,23 @@ class ToolChatService:
             }
             return json.dumps(payload), True
 
-        result = await self._tool_executor.execute(
-            ToolCall(
-                name=tool_call.name,
-                arguments=tool_call.arguments,
-                call_id=tool_call.id,
-            ),
-            ToolExecutionContext(
-                caller=caller,
-                request_id=get_request_id(),
-            ),
-        )
+        if tool_call.name == WEB_SEARCH_TOOL_NAME and on_activity is not None:
+            await on_activity("web_search")
+        try:
+            result = await self._tool_executor.execute(
+                ToolCall(
+                    name=tool_call.name,
+                    arguments=tool_call.arguments,
+                    call_id=tool_call.id,
+                ),
+                ToolExecutionContext(
+                    caller=caller,
+                    request_id=get_request_id(),
+                ),
+            )
+        finally:
+            if tool_call.name == WEB_SEARCH_TOOL_NAME and on_activity is not None:
+                await on_activity("thinking")
         payload: dict[str, object] = {
             "success": result.success,
             "data": result.data,

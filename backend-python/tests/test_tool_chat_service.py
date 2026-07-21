@@ -130,6 +130,95 @@ async def test_tool_loop_executes_search_and_returns_final_answer(
 
 
 @pytest.mark.anyio
+async def test_tool_loop_emits_web_search_activity(
+    tool_registry: ToolRegistry,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    provider = FakeProvider(
+        tool_completions=[
+            ProviderToolCompletion(
+                content=None,
+                tool_calls=[
+                    ProviderToolCall(
+                        id="call-1",
+                        name="web_search",
+                        arguments={"query": "weather"},
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            ProviderToolCompletion(
+                content="It is sunny.",
+                tool_calls=[],
+                finish_reason="stop",
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        ProviderFactory,
+        "get_provider",
+        staticmethod(lambda name=None, settings=None: provider),
+    )
+    service = _build_service(provider=provider, registry=tool_registry)
+    caller = CallerContext.for_user(uuid.uuid4())
+    phases: list[str] = []
+
+    async def on_activity(phase: str) -> None:
+        phases.append(phase)
+
+    await service.complete_chat(
+        ChatRequestSchema(
+            messages=[ChatMessageSchema(role="user", content="Weather today?")],
+            provider="openai",
+            model="gpt-4o-mini",
+        ),
+        caller,
+        on_activity=on_activity,
+    )
+
+    assert phases == ["web_search", "thinking"]
+
+
+@pytest.mark.anyio
+async def test_direct_answer_emits_no_web_search_activity(
+    tool_registry: ToolRegistry,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    provider = FakeProvider(
+        tool_completions=[
+            ProviderToolCompletion(
+                content="You are welcome!",
+                tool_calls=[],
+                finish_reason="stop",
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        ProviderFactory,
+        "get_provider",
+        staticmethod(lambda name=None, settings=None: provider),
+    )
+    service = _build_service(provider=provider, registry=tool_registry)
+    caller = CallerContext.for_user(uuid.uuid4())
+    phases: list[str] = []
+
+    async def on_activity(phase: str) -> None:
+        phases.append(phase)
+
+    await service.complete_chat(
+        ChatRequestSchema(
+            messages=[ChatMessageSchema(role="user", content="thanks")],
+            provider="openai",
+            model="gpt-4o-mini",
+        ),
+        caller,
+        on_activity=on_activity,
+    )
+
+    assert phases == []
+
+
+@pytest.mark.anyio
 async def test_iteration_cap_stops_after_max_iterations(
     tool_registry: ToolRegistry,
     monkeypatch: MonkeyPatch,

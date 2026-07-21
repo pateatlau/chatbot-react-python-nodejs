@@ -16,6 +16,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict[str, str | 
         "provider": settings.llm_provider,
         "version": APP_VERSION,
         "chat_streaming_enabled": settings.chat_streaming_enabled,
+        "tools_enabled": settings.tools_enabled,
     }
 
 

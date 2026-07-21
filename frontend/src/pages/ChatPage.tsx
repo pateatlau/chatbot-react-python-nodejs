@@ -86,6 +86,8 @@ function ChatPageContent() {
   const messageRequestMapRef = useRef(new Map<string, ChatRequest>())
   const streamMessageMapRef = useRef(new Map<string, string>())
   const stoppedStreamIdsRef = useRef(new Set<string>())
+  type ActiveChatTransport = 'streaming' | 'completion'
+  const activeTransportRef = useRef<ActiveChatTransport | null>(null)
   // Monotonic counter guarding loadSession against out-of-order responses: a
   // superseded fetch (an older selection resolving after a newer one) must
   // never overwrite the transcript of the session the user is now viewing.
@@ -175,6 +177,11 @@ function ChatPageContent() {
 
   const handleCompletionError = useCallback(
     (error: Error) => {
+      if (activeTransportRef.current !== 'completion') {
+        return
+      }
+      activeTransportRef.current = null
+
       const id = currentMessageIdRef.current
 
       if (error instanceof ChatApiError) {
@@ -217,6 +224,11 @@ function ChatPageContent() {
   } = useChatCompletion({
     useProgress: false,
     onComplete: (response) => {
+      if (activeTransportRef.current !== 'completion') {
+        return
+      }
+      activeTransportRef.current = null
+
       const localMessageId = currentMessageIdRef.current ?? response.id
 
       if (pendingRequestRef.current) {
@@ -298,9 +310,16 @@ function ChatPageContent() {
         return
       }
 
+      if (activeTransportRef.current !== 'streaming') {
+        return
+      }
+
       const localMessageId = streamMessageMapRef.current.get(chunk.id) ?? chunk.id
       dispatch({ type: 'END_MESSAGE', id: localMessageId })
       streamMessageMapRef.current.delete(chunk.id)
+      if (activeTransportRef.current === 'streaming') {
+        activeTransportRef.current = null
+      }
       currentMessageIdRef.current = null
       currentStreamIdRef.current = null
       pendingRequestRef.current = null
@@ -312,6 +331,10 @@ function ChatPageContent() {
       }
     },
     onError: (error) => {
+      if (activeTransportRef.current !== 'streaming') {
+        return
+      }
+
       const id = currentMessageIdRef.current
       const chunkError = isChunkError(error)
 
@@ -379,6 +402,7 @@ function ChatPageContent() {
         }
       }
 
+      activeTransportRef.current = null
       currentMessageIdRef.current = null
       currentStreamIdRef.current = null
       pendingRequestRef.current = null
@@ -410,8 +434,10 @@ function ChatPageContent() {
     }
 
     if (useStreamingTransport) {
+      activeTransportRef.current = 'streaming'
       void start(request)
     } else {
+      activeTransportRef.current = 'completion'
       void completionStart(request, {
         useProgress: Boolean(
           (request.use_web_search && toolsEnabled) || (request.use_documents && ragEnabled),
@@ -476,11 +502,13 @@ function ChatPageContent() {
   }
 
   const handleStop = () => {
-    if (chatStreamingEnabled) {
+    if (activeTransportRef.current === 'streaming') {
       stop()
-    } else {
+    } else if (activeTransportRef.current === 'completion') {
       completionStop()
     }
+    activeTransportRef.current = null
+
     const id = currentMessageIdRef.current
     const streamId = currentStreamIdRef.current
 

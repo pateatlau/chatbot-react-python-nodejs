@@ -60,11 +60,13 @@ class UnifiedChatService:
         caller: CallerContext | None = None,
         on_activity: ChatActivityCallback | None = None,
     ) -> ChatResponseSchema:
-        if self._toggle_requires_auth(request) and self._is_guest_or_anonymous(caller):
-            return await self._guest_denial_response(request, caller)
-
         effective_web_search = request.use_web_search and self._settings.tools_enabled
         effective_documents = request.use_documents and self._settings.rag_enabled
+
+        if (
+            effective_web_search or effective_documents
+        ) and self._is_guest_or_anonymous(caller):
+            return await self._guest_denial_response(request, caller)
 
         provider, model, provider_name = self._chat_service._resolve_provider(request)
 
@@ -130,10 +132,6 @@ class UnifiedChatService:
                 update={"retrieved_chunks": retrieved_chunks}
             )
         return response
-
-    @staticmethod
-    def _toggle_requires_auth(request: ChatRequestSchema) -> bool:
-        return request.use_web_search or request.use_documents
 
     @staticmethod
     def _is_guest_or_anonymous(caller: CallerContext | None) -> bool:

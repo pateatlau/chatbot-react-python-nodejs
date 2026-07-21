@@ -581,6 +581,41 @@ async def test_chat_flags_off_toggles_ignored(monkeypatch: MonkeyPatch) -> None:
 
 
 @pytest.mark.anyio
+async def test_chat_guest_toggles_ignored_when_flags_off(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TOOLS_ENABLED", "false")
+    monkeypatch.setenv("RAG_ENABLED", "false")
+    get_settings.cache_clear()
+
+    fake_provider = FakeProvider("Guest plain chat when flags off")
+    monkeypatch.setattr(
+        ProviderFactory,
+        "get_provider",
+        _mock_provider_factory(fake_provider),
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/chat",
+            json={
+                "messages": [{"role": "user", "content": "Hello"}],
+                "use_web_search": True,
+                "use_documents": True,
+                "provider": "openai",
+                "model": "gpt-4o-mini",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["content"] == "Guest plain chat when flags off"
+    assert response.json()["content"] != _GUEST_TOOL_DENIED_MESSAGE
+    assert fake_provider.tool_completion_calls == 0
+
+
+@pytest.mark.anyio
 async def test_chat_use_web_search_unsupported_provider(
     monkeypatch: MonkeyPatch,
 ) -> None:

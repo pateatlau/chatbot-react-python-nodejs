@@ -16,6 +16,8 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.documents.pipeline import IngestionPipeline
+from app.ai.embeddings.factory import create_embedding_provider
+from app.ai.interfaces.embedding_provider import EmbeddingProvider
 from app.ai.prompts.manager import PromptManager, create_prompt_manager
 from app.ai.tools.executor import ToolExecutor
 from app.ai.tools.implementations.web_search import (
@@ -61,11 +63,25 @@ def get_tool_executor(
     return ToolExecutor(registry=registry, settings=settings)
 
 
+@lru_cache
+def get_embedding_provider() -> EmbeddingProvider:
+    """Return the process-wide embedding provider (OpenAI in V1)."""
+    return create_embedding_provider(get_settings())
+
+
 def get_ingestion_pipeline(
     settings: Settings = Depends(get_ai_settings),
 ) -> IngestionPipeline:
     """Return a request-scoped ingestion pipeline (parse + chunk only)."""
     return IngestionPipeline(settings)
+
+
+def get_ingestion_pipeline_with_embeddings(
+    settings: Settings = Depends(get_ai_settings),
+    embedding_provider: EmbeddingProvider = Depends(get_embedding_provider),
+) -> IngestionPipeline:
+    """Return a pipeline wired for in-memory parse → chunk → embed."""
+    return IngestionPipeline(settings, embedding_provider=embedding_provider)
 
 
 def get_document_service(

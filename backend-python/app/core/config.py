@@ -76,6 +76,7 @@ class Settings(BaseSettings):
     embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = Field(default=1536, ge=1)
+    embedding_batch_size: int = Field(default=100, ge=1)
     chunk_size: int = Field(default=1000, ge=1)
     chunk_overlap: int = Field(default=200, ge=0)
     rag_top_k: int = Field(default=5, ge=1)

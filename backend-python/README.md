@@ -136,12 +136,33 @@ Settings (service-layer validation in Phase 5; HTTP enforcement in Phase 11):
 | Chunk overlap | `CHUNK_OVERLAP` | `200` |
 | Upload max bytes | `DOCUMENT_UPLOAD_MAX_BYTES` | `10485760` (10 MB) |
 
-Phase 5 scope: parse + chunk + persist text chunks only. The `embedding` column exists as nullable `REAL[]` (NULL in Phase 5); pgvector migration and indexing arrive in Phase 7. No embeddings, vector search, or RAG routes yet.
+Phase 5 scope: parse + chunk + persist text chunks only. The `embedding` column exists as nullable `REAL[]` (NULL in Phase 5); pgvector migration and indexing arrive in Phase 7. No vector search or RAG routes yet.
+
+### Embeddings (Phase 6)
+
+In-memory embedding generation only — vectors are attached to pipeline `DocumentChunk` instances after chunking and are **not** persisted to Postgres until Phase 7 (`KnowledgeService` + pgvector).
+
+| Setting | Env var | Default |
+| ------- | ------- | ------- |
+| Embedding provider | `EMBEDDING_PROVIDER` | `openai` |
+| Embedding model | `EMBEDDING_MODEL` | `text-embedding-3-small` |
+| Embedding dimensions | `EMBEDDING_DIMENSIONS` | `1536` |
+| Embedding batch size | `EMBEDDING_BATCH_SIZE` | `100` |
+
+- `IngestionPipeline.embed()` and `parse_chunk_embed()` require an injected `EmbeddingProvider`; `DocumentService` continues parse + chunk only (DB `embedding` column stays NULL).
+- Structured logs emit `embedding_latency_ms` and batch/text counts — never chunk content or vector values.
+- V2 embedding cache (Redis) is deferred; see comment in `app/ai/embeddings/factory.py`.
+- When `RAG_ENABLED=true` and `EMBEDDING_PROVIDER=openai`, startup requires `OPENAI_API_KEY` (existing validation in `Settings.validate_rag_requirements()`).
 
 Wire via DI:
 
 ```python
-from app.ai.deps import get_document_service, get_ingestion_pipeline
+from app.ai.deps import (
+    get_document_service,
+    get_embedding_provider,
+    get_ingestion_pipeline,
+    get_ingestion_pipeline_with_embeddings,
+)
 ```
 
 ### Module boundaries

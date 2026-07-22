@@ -78,8 +78,10 @@ class _EvalLLMProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
-        del messages, model, temperature
+        del messages, model, temperature, max_tokens
         if False:
             yield ProviderChunk(content="", finish_reason=None)
 
@@ -88,8 +90,10 @@ class _EvalLLMProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
-        del model, temperature
+        del model, temperature, max_tokens
         self.last_messages = list(messages)
         content = self._response
         if self._judge_mode and messages:
@@ -115,8 +119,10 @@ class _EvalLLMProvider:
         model: str,
         tools: list[dict[str, object]],
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderToolCompletion:
-        del messages, model, tools, temperature
+        del messages, model, tools, temperature, max_tokens
         return ProviderToolCompletion(
             content=self._response,
             tool_calls=[],

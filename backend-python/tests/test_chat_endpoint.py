@@ -32,8 +32,10 @@ class ErroringProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
-        del messages, model, temperature
+        del messages, model, temperature, max_tokens
         raise RuntimeError("provider exploded")
 
 

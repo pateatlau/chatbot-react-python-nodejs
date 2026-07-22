@@ -40,7 +40,10 @@ class ErroringStreamProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
+        del messages, model, temperature, max_tokens
         raise RuntimeError("provider exploded")
         yield  # pragma: no cover
 
@@ -56,7 +59,10 @@ class RecordingProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
+        del messages, model, temperature, max_tokens
         chunks: tuple[ProviderChunk, ProviderChunk] = (
             ProviderChunk(content="first ", finish_reason=None),
             ProviderChunk(content="second", finish_reason="stop"),
@@ -79,8 +85,10 @@ class CapturingStreamProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
-        del messages, temperature
+        del messages, temperature, max_tokens
         self.last_model = model
         yield ProviderChunk(content="default stream response", finish_reason="stop")
 

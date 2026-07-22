@@ -185,12 +185,16 @@ class AnthropicProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
         system, anthropic_messages = _split_messages_for_anthropic(messages)
         request_payload: dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
-            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            "max_tokens": max_tokens
+            if max_tokens is not None
+            else ANTHROPIC_MAX_TOKENS,
             "temperature": temperature,
         }
         if system is not None:
@@ -213,12 +217,16 @@ class AnthropicProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
         system, anthropic_messages = _split_messages_for_anthropic(messages)
         request_payload: dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
-            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            "max_tokens": max_tokens
+            if max_tokens is not None
+            else ANTHROPIC_MAX_TOKENS,
             "temperature": temperature,
         }
         if system is not None:
@@ -237,12 +245,16 @@ class AnthropicProvider:
         model: str,
         tools: list[dict[str, object]],
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderToolCompletion:
         system, anthropic_messages = _split_tool_messages_for_anthropic(messages)
         request_payload: dict[str, Any] = {
             "model": model,
             "messages": anthropic_messages,
-            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            "max_tokens": max_tokens
+            if max_tokens is not None
+            else ANTHROPIC_MAX_TOKENS,
             "temperature": temperature,
         }
         if system is not None:

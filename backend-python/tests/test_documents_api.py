@@ -19,6 +19,8 @@ from app.core.security import create_access_token
 from app.db.identity import SqlUserStore
 from app.main import DOCUMENT_UPLOAD_PATH, app, enforce_request_size
 from app.services.knowledge_service import KnowledgeService
+from app.services.quota_service import QuotaService
+from tests.fakes import FakeUploadQuotaStore
 from fastapi import Request, Response
 from starlette.types import Message, Scope
 
@@ -61,16 +63,41 @@ def _auth_headers(user_id: uuid.UUID) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _knowledge_service(session) -> KnowledgeService:
-    settings = Settings(openai_api_key="test-key")
-    pipeline = IngestionPipeline(settings, embedding_provider=_FakeEmbeddingProvider())
-    vector_store = PgVectorStore(session, settings)
+def _knowledge_service(
+    session, *, settings: Settings | None = None
+) -> KnowledgeService:
+    resolved_settings = settings or Settings(openai_api_key="test-key")
+    pipeline = IngestionPipeline(
+        resolved_settings, embedding_provider=_FakeEmbeddingProvider()
+    )
+    vector_store = PgVectorStore(session, resolved_settings)
+    quota_service = QuotaService(
+        store=_NoopGuestQuotaStore(),
+        upload_store=FakeUploadQuotaStore(),
+        settings=resolved_settings,
+    )
     return KnowledgeService(
         session=session,
-        settings=settings,
+        settings=resolved_settings,
         pipeline=pipeline,
         vector_store=vector_store,
+        quota_service=quota_service,
     )
+
+
+class _NoopGuestQuotaStore:
+    async def get_message_count(self, guest_id: object, window_start: object) -> int:
+        del guest_id, window_start
+        return 0
+
+    async def increment(
+        self,
+        guest_id: object,
+        window_start: object,
+        *,
+        tokens: int = 0,
+    ) -> None:
+        del guest_id, window_start, tokens
 
 
 @pytest.fixture
@@ -347,3 +374,76 @@ async def test_document_upload_route_uses_upload_limit_not_chat_limit(
 
     get_settings.cache_clear()
     assert response.status_code == 204
+
+
+@pytest.mark.anyio
+async def test_upload_quota_allows_uploads_under_limit(
+    pgvector_session,
+    knowledge_service_override,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AUTHENTICATED_DAILY_UPLOAD_QUOTA", "2")
+    get_settings.cache_clear()
+    settings = Settings(openai_api_key="test-key", authenticated_daily_upload_quota=2)
+
+    user_id = await _make_user(pgvector_session)
+    headers = _auth_headers(user_id)
+    file_bytes = (FIXTURES / "sample.txt").read_bytes()
+
+    def _override() -> KnowledgeService:
+        return _knowledge_service(pgvector_session, settings=settings)
+
+    app.dependency_overrides[get_knowledge_service] = _override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        first = await client.post(
+            "/api/documents/upload",
+            files={"file": ("sample.txt", file_bytes, "text/plain")},
+            headers=headers,
+        )
+        assert first.status_code == 200
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_upload_quota_denies_after_limit(
+    pgvector_session,
+    knowledge_service_override,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AUTHENTICATED_DAILY_UPLOAD_QUOTA", "1")
+    get_settings.cache_clear()
+    settings = Settings(openai_api_key="test-key", authenticated_daily_upload_quota=1)
+
+    user_id = await _make_user(pgvector_session)
+    headers = _auth_headers(user_id)
+    file_bytes = (FIXTURES / "sample.txt").read_bytes()
+    shared_service = _knowledge_service(pgvector_session, settings=settings)
+
+    def _override() -> KnowledgeService:
+        return shared_service
+
+    app.dependency_overrides[get_knowledge_service] = _override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        first = await client.post(
+            "/api/documents/upload",
+            files={"file": ("sample.txt", file_bytes, "text/plain")},
+            headers=headers,
+        )
+        assert first.status_code == 200
+
+        second = await client.post(
+            "/api/documents/upload",
+            files={"file": ("sample.txt", file_bytes, "text/plain")},
+            headers=headers,
+        )
+        assert second.status_code == 429
+        assert second.json()["error"]["code"] == "quota_exceeded"
+
+    get_settings.cache_clear()

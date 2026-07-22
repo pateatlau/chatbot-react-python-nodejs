@@ -296,6 +296,28 @@ class GuestQuotaCounter(Base):
     )
 
 
+class UploadQuotaCounter(Base):
+    """Durable windowed authenticated upload counts (V1.1.1 demo protection)."""
+
+    __tablename__ = "upload_quota_counters"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    window_start: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    upload_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=_NOW,
+        onupdate=_NOW,
+    )
+
+
 class Document(Base):
     """Auth-owned uploaded document (Post-MVP V1 Phase 5)."""
 

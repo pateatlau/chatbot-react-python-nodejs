@@ -33,6 +33,10 @@ def test_ai_settings_load_with_defaults(monkeypatch: pytest.MonkeyPatch) -> None
     assert settings.web_search_provider == "tavily"
     assert settings.web_search_api_key is None
     assert settings.web_search_max_results == 5
+    assert settings.guest_max_output_tokens == 4096
+    assert settings.authenticated_daily_upload_quota is None
+    assert settings.guest_daily_upload_quota == 5
+    assert settings.demo_mode_strict is False
 
 
 def test_feature_flags_default_off(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,6 +180,42 @@ def test_default_max_tokens_empty_env_value_means_provider_default() -> None:
         }
     )
     assert settings.default_max_tokens is None
+
+
+def test_authenticated_daily_upload_quota_empty_env_means_unlimited() -> None:
+    settings = Settings.model_validate(
+        {
+            "llm_provider": "openai",
+            "openai_api_key": "sk-placeholder",
+            "authenticated_daily_upload_quota": "",
+        }
+    )
+    assert settings.authenticated_daily_upload_quota is None
+
+
+@pytest.mark.parametrize("invalid_quota", [0, -1])
+def test_authenticated_daily_upload_quota_rejects_non_positive(
+    invalid_quota: int,
+) -> None:
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        Settings.model_validate(
+            {
+                "llm_provider": "openai",
+                "openai_api_key": "sk-placeholder",
+                "authenticated_daily_upload_quota": invalid_quota,
+            }
+        )
+
+
+def test_authenticated_daily_upload_quota_accepts_positive_value() -> None:
+    settings = Settings.model_validate(
+        {
+            "llm_provider": "openai",
+            "openai_api_key": "sk-placeholder",
+            "authenticated_daily_upload_quota": 20,
+        }
+    )
+    assert settings.authenticated_daily_upload_quota == 20
 
 
 def test_ai_package_imports_cleanly() -> None:

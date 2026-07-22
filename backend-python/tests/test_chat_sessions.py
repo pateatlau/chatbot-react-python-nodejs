@@ -35,9 +35,18 @@ class RecordingProvider(FakeProvider):
         super().__init__(response)
         self.complete_calls = 0
 
-    async def complete_chat(self, messages, model, temperature: float = 0.7):  # type: ignore[override]
+    async def complete_chat(
+        self,
+        messages,
+        model,
+        temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
+    ):  # type: ignore[override]
         self.complete_calls += 1
-        return await super().complete_chat(messages, model, temperature)
+        return await super().complete_chat(
+            messages, model, temperature, max_tokens=max_tokens
+        )
 
 
 def _patch_provider(monkeypatch: MonkeyPatch, provider: FakeProvider) -> None:

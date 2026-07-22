@@ -14,7 +14,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import GuestIdentity, GuestQuotaCounter, User
+from app.db.models import GuestIdentity, GuestQuotaCounter, UploadQuotaCounter, User
 
 
 class SqlUserStore:
@@ -158,5 +158,61 @@ class SqlGuestQuotaStore:
                 "total_tokens": GuestQuotaCounter.total_tokens + tokens,
                 "updated_at": func.now(),
             },
+        )
+        await self._session.execute(stmt)
+
+
+class SqlUploadQuotaStore:
+    """Durable, windowed authenticated upload counters (V1.1.1 demo protection)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_upload_count(
+        self, user_id: uuid.UUID, window_start: datetime.date
+    ) -> int:
+        value = await self._session.scalar(
+            select(UploadQuotaCounter.upload_count).where(
+                UploadQuotaCounter.user_id == user_id,
+                UploadQuotaCounter.window_start == window_start,
+            )
+        )
+        return value or 0
+
+    async def try_reserve(
+        self,
+        user_id: uuid.UUID,
+        window_start: datetime.date,
+        *,
+        quota: int,
+    ) -> bool:
+        stmt = pg_insert(UploadQuotaCounter).values(
+            user_id=user_id,
+            window_start=window_start,
+            upload_count=1,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "window_start"],
+            set_={
+                "upload_count": UploadQuotaCounter.upload_count + 1,
+                "updated_at": func.now(),
+            },
+            where=(UploadQuotaCounter.upload_count < quota),
+        ).returning(UploadQuotaCounter.upload_count)
+        result = await self._session.scalar(stmt)
+        return result is not None
+
+    async def release(self, user_id: uuid.UUID, window_start: datetime.date) -> None:
+        stmt = (
+            update(UploadQuotaCounter)
+            .where(
+                UploadQuotaCounter.user_id == user_id,
+                UploadQuotaCounter.window_start == window_start,
+                UploadQuotaCounter.upload_count > 0,
+            )
+            .values(
+                upload_count=UploadQuotaCounter.upload_count - 1,
+                updated_at=func.now(),
+            )
         )
         await self._session.execute(stmt)

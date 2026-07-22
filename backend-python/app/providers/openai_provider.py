@@ -87,15 +87,20 @@ class OpenAIProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
+        kwargs: dict[str, object] = {
+            "model": model,
+            "messages": _to_openai_messages(messages),
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         stream: AsyncStream[
             ChatCompletionChunk
-        ] = await self._client.chat.completions.create(
-            model=model,
-            messages=_to_openai_messages(messages),
-            temperature=temperature,
-            stream=True,
-        )
+        ] = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
         async for event in stream:
             if not event.choices:
                 continue
@@ -110,12 +115,19 @@ class OpenAIProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
+        kwargs: dict[str, object] = {
+            "model": model,
+            "messages": _to_openai_messages(messages),
+            "temperature": temperature,
+            "stream": False,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         response: ChatCompletion = await self._client.chat.completions.create(
-            model=model,
-            messages=_to_openai_messages(messages),
-            temperature=temperature,
-            stream=False,
+            **kwargs  # type: ignore[arg-type]
         )
         usage = _usage_from_response(response)
         if not response.choices:
@@ -133,13 +145,20 @@ class OpenAIProvider:
         model: str,
         tools: list[dict[str, object]],
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderToolCompletion:
+        kwargs: dict[str, object] = {
+            "model": model,
+            "messages": _to_openai_tool_messages(messages),
+            "tools": cast(list[ChatCompletionToolParam], tools),
+            "temperature": temperature,
+            "stream": False,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         response: ChatCompletion = await self._client.chat.completions.create(
-            model=model,
-            messages=_to_openai_tool_messages(messages),
-            tools=cast(list[ChatCompletionToolParam], tools),
-            temperature=temperature,
-            stream=False,
+            **kwargs  # type: ignore[arg-type]
         )
         usage = _usage_from_response(response)
         if not response.choices:

@@ -55,6 +55,7 @@ from app.services.chat_service import (
     format_sse,
     normalize_chat_error,
 )
+from app.services.max_tokens import resolve_max_tokens
 from app.services.tool_chat_service import (
     ChatActivityCallback,
     ToolChatService,
@@ -594,7 +595,14 @@ class UnifiedChatService:
 
         try:
             provider_stream = provider.stream_chat(
-                messages, model, temperature
+                messages,
+                model,
+                temperature,
+                max_tokens=resolve_max_tokens(
+                    caller,
+                    self._settings,
+                    provider_name=provider_name,
+                ),
             ).__aiter__()
             closable_provider_stream = cast(
                 ClosableAsyncIterator | None, provider_stream

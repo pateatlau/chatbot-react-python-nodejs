@@ -55,10 +55,14 @@ class _CapturingLLMProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
         self.complete_chat_calls += 1
         self.messages = list(messages)
-        return await super().complete_chat(messages, model, temperature)
+        return await super().complete_chat(
+            messages, model, temperature, max_tokens=max_tokens
+        )
 
 
 def _chunk(*, index: int, content: str, score: float) -> ScoredChunk:

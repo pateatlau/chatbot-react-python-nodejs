@@ -9,6 +9,7 @@ MVP hardening is complete (2026-07-19): structured logging, correlation IDs, cen
 - Multi-provider chat (OpenAI, Gemini, Groq, Anthropic) — streaming and non-streaming
 - Unified chat orchestration via `UnifiedChatService` — web search and document grounding toggles on `POST /api/chat` and `POST /api/chat/stream` (V1.1)
 - Google OAuth login with app-issued JWT; guest identity and daily quota
+- Public demo protection (V1.1.1): guest output token cap, optional authenticated daily upload quota — see [docs/ops/public-demo-protection.md](../docs/ops/public-demo-protection.md)
 - Chat persistence (sessions, messages, usage) when `CHAT_PERSISTENCE_ENABLED=true`
 - Typed error envelopes and SSE error frames with `request_id`
 - Request-size and schema validation; provider timeout normalization

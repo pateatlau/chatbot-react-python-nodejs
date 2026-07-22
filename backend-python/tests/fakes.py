@@ -43,13 +43,18 @@ class FakeProvider:
         self._tool_completions = tool_completions or []
         self._tool_call_index = 0
         self.tool_completion_calls = 0
+        self.last_max_tokens: int | None = None
+        self.last_stream_max_tokens: int | None = None
 
     async def stream_chat(
         self,
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
+        self.last_stream_max_tokens = max_tokens
         words = self.response.split(" ")
         for i, word in enumerate(words):
             await asyncio.sleep(
@@ -67,7 +72,10 @@ class FakeProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
+        self.last_max_tokens = max_tokens
         return ProviderCompletion(
             content=self.response,
             finish_reason="stop",
@@ -80,8 +88,10 @@ class FakeProvider:
         model: str,
         tools: list[dict[str, object]],
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderToolCompletion:
-        del messages, model, tools, temperature
+        del messages, model, tools, temperature, max_tokens
         self.tool_completion_calls += 1
         if self._tool_completions:
             index = min(self._tool_call_index, len(self._tool_completions) - 1)
@@ -227,6 +237,39 @@ class FakeGuestQuotaStore:
         key = (guest_id, window_start)
         self.counters[key] = self.counters.get(key, 0) + 1
         self.token_totals[key] = self.token_totals.get(key, 0) + tokens
+
+
+class FakeUploadQuotaStore:
+    """In-memory daily upload counters for upload quota unit tests."""
+
+    def __init__(self) -> None:
+        self.counters: dict[tuple[uuid.UUID, object], int] = {}
+        self._lock = asyncio.Lock()
+
+    async def get_upload_count(self, user_id: uuid.UUID, window_start: object) -> int:
+        return self.counters.get((user_id, window_start), 0)
+
+    async def try_reserve(
+        self,
+        user_id: uuid.UUID,
+        window_start: object,
+        *,
+        quota: int,
+    ) -> bool:
+        async with self._lock:
+            key = (user_id, window_start)
+            count = self.counters.get(key, 0)
+            if count >= quota:
+                return False
+            self.counters[key] = count + 1
+            return True
+
+    async def release(self, user_id: uuid.UUID, window_start: object) -> None:
+        async with self._lock:
+            key = (user_id, window_start)
+            count = self.counters.get(key, 0)
+            if count > 0:
+                self.counters[key] = count - 1
 
 
 class FakeChatStore:

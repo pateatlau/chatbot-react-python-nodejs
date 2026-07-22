@@ -47,8 +47,10 @@ class _CapturingLLMProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
-        del model, temperature
+        del model, temperature, max_tokens
         return ProviderCompletion(
             content="Answer references fixture content.",
             finish_reason="stop",

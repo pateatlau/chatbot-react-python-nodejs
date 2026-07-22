@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,12 @@ from app.db.models import Document
 from app.services.document_service import validate_document_upload
 
 _logger = get_logger(__name__)
+
+
+class UploadQuotaChecker(Protocol):
+    async def reserve_upload(self, user_id: uuid.UUID) -> None: ...
+
+    async def release_upload(self, user_id: uuid.UUID) -> None: ...
 
 
 class KnowledgeServiceError(Exception):
@@ -36,12 +43,14 @@ class KnowledgeService:
         settings: Settings,
         pipeline: IngestionPipeline,
         vector_store: VectorStore,
+        quota_service: UploadQuotaChecker | None = None,
     ) -> None:
         self._session = session
         self._settings = settings
         self._store = SqlDocumentStore(session)
         self._pipeline = pipeline
         self._vector_store = vector_store
+        self._quota_service = quota_service
 
     async def ingest_document(
         self,
@@ -56,6 +65,11 @@ class KnowledgeService:
             filename=filename,
             mime_type=mime_type,
         )
+
+        quota_reserved = False
+        if self._quota_service is not None:
+            await self._quota_service.reserve_upload(user_id)
+            quota_reserved = True
 
         document = await self._store.create_document(
             user_id=user_id,
@@ -89,6 +103,8 @@ class KnowledgeService:
             )
             return document_id
         except Exception:
+            if quota_reserved and self._quota_service is not None:
+                await self._quota_service.release_upload(user_id)
             await self._cleanup_failed_ingest(document_id)
             _logger.error(
                 "Document ingestion failed",

@@ -619,7 +619,7 @@ describe('ChatPage session sidebar wiring', () => {
     expect(body.use_documents).toBe(true)
   })
 
-  it('deleting a saved session calls DELETE, refreshes the list, and loads a fallback session', async () => {
+  it('deleting a saved session refreshes the list but keeps the active transcript', async () => {
     let secondSessionDeleted = false
     const fetchMock = createRoutedFetchMock((url, method) => {
       if (url.endsWith('/api/chat/sessions') && method === 'GET') {
@@ -717,6 +717,13 @@ describe('ChatPage session sidebar wiring', () => {
       ).toBe(true)
       expect(screen.getByText('Active chat message')).not.toBeNull()
     })
+
+    const s1DetailCalls = fetchMock.mock.calls.filter(([input, init]) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      return url.endsWith('/api/chat/sessions/s1') && (init?.method ?? 'GET') === 'GET'
+    })
+    // Mount auto-resume loads s1 once; deleting non-active s2 must not re-fetch s1.
+    expect(s1DetailCalls).toHaveLength(1)
   })
 
   it('canceling delete confirmation does not call DELETE', async () => {
@@ -755,6 +762,101 @@ describe('ChatPage session sidebar wiring', () => {
 
     const deleteCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE')
     expect(deleteCalls).toHaveLength(0)
+  })
+
+  it('deleting the active session loads the next remaining session transcript', async () => {
+    let firstSessionDeleted = false
+    const fetchMock = createRoutedFetchMock((url, method) => {
+      if (url.endsWith('/api/chat/sessions') && method === 'GET') {
+        return jsonResponse(
+          firstSessionDeleted
+            ? [
+                {
+                  id: 's2',
+                  title: 'Second chat',
+                  last_message_at: '2026-01-01T00:00:00Z',
+                  created_at: '2025-12-01T00:00:00Z',
+                },
+              ]
+            : [
+                {
+                  id: 's1',
+                  title: 'First chat',
+                  last_message_at: '2026-01-02T00:00:00Z',
+                  created_at: '2026-01-01T00:00:00Z',
+                },
+                {
+                  id: 's2',
+                  title: 'Second chat',
+                  last_message_at: '2026-01-01T00:00:00Z',
+                  created_at: '2025-12-01T00:00:00Z',
+                },
+              ],
+        )
+      }
+      if (url.endsWith('/api/chat/sessions/s1') && method === 'GET') {
+        return jsonResponse({
+          id: 's1',
+          title: 'First chat',
+          last_message_at: null,
+          messages: [
+            {
+              id: 'm1',
+              seq: 1,
+              role: 'user',
+              content: 'Active first chat message',
+              provider: null,
+              model: null,
+              status: 'complete',
+              finish_reason: null,
+              created_at: '2026-01-01T00:00:00Z',
+            },
+          ],
+        })
+      }
+      if (url.endsWith('/api/chat/sessions/s2') && method === 'GET') {
+        return jsonResponse({
+          id: 's2',
+          title: 'Second chat',
+          last_message_at: null,
+          messages: [
+            {
+              id: 'm2',
+              seq: 1,
+              role: 'user',
+              content: 'Fallback second chat message',
+              provider: null,
+              model: null,
+              status: 'complete',
+              finish_reason: null,
+              created_at: '2026-01-01T00:00:00Z',
+            },
+          ],
+        })
+      }
+      if (url.endsWith('/api/chat/sessions/s1') && method === 'DELETE') {
+        firstSessionDeleted = true
+        return new Response(null, { status: 204 })
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithProviders(<ChatPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Active first chat message')).not.toBeNull()
+    })
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Delete First chat' }))
+    await userEvent
+      .setup()
+      .click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Fallback second chat message')).not.toBeNull()
+      expect(screen.queryByText('Active first chat message')).toBeNull()
+    })
   })
 
   it('deleting the last remaining active session creates a new empty session', async () => {
@@ -839,7 +941,7 @@ describe('ChatPage session sidebar wiring', () => {
     })
   })
 
-  it('deleting one of multiple sessions selects the first remaining session', async () => {
+  it('deleting a non-active saved session keeps the active transcript visible', async () => {
     let sessionsAfterDelete = false
     const fetchMock = createRoutedFetchMock((url, method) => {
       if (url.endsWith('/api/chat/sessions') && method === 'GET') {

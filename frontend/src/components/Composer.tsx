@@ -361,7 +361,7 @@ export function Composer({
             {isStreaming ? (
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-danger-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-danger-600/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600"
+                className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-danger-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-danger-600/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-600"
                 onMouseDown={(event) => {
                   event.preventDefault()
                   onStop()
@@ -373,7 +373,7 @@ export function Composer({
             ) : (
               <button
                 type="submit"
-                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:bg-brand-500/40"
+                className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:bg-brand-500/40"
                 disabled={!hasMessage || disabled}
               >
                 Send

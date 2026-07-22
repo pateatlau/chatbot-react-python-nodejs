@@ -38,6 +38,11 @@ const INVALID_ACCESS_TOKEN_CODE = 'invalid_access_token'
 const QUOTA_EXCEEDED_CODE = 'quota_exceeded'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'chat-sidebar-collapsed'
 
+const SESSION_ITEM_BASE =
+  'cursor-pointer text-left transition-[background-color,border-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500'
+const SESSION_ITEM_HOVER = 'hover:border-brand-500/70 hover:bg-white hover:shadow-md'
+const SESSION_ITEM_ACTIVE_HOVER = 'hover:border-brand-500 hover:bg-brand-50 hover:shadow-md'
+
 function readSidebarCollapsedPreference(): boolean {
   try {
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
@@ -680,13 +685,26 @@ function ChatPageContent() {
     if (isGenerating) {
       handleStop()
     }
+    const activeSessionIdAtDelete = state.activeSessionId
+    const wasActiveSession =
+      activeSessionIdAtDelete !== null && sessionId === activeSessionIdAtDelete
     void (async () => {
       setIsDeletingSession(true)
       try {
         await deleteChatSession(sessionId)
         const sessions = await refreshSessions()
-        if (sessions && sessions.length > 0) {
-          await loadSession(sessions[0].id)
+        if (!wasActiveSession) {
+          // Deleting a saved (non-active) session: sidebar refresh only — keep
+          // the current transcript untouched (Phase 2 post-delete UX).
+          return
+        }
+
+        // Active session deleted: invalidate in-flight fetches, then select the
+        // most recently active remaining session or start a new empty chat.
+        sessionLoadSeqRef.current += 1
+        const remaining = (sessions ?? []).filter((session) => session.id !== sessionId)
+        if (remaining.length > 0) {
+          await loadSession(remaining[0].id)
         } else {
           const created = await createChatSession()
           dispatch({ type: 'LOAD_SESSION', sessionId: created.id, messages: [] })
@@ -706,7 +724,7 @@ function ChatPageContent() {
   const renderDeleteButton = (sessionId: string, sessionTitle: string) => (
     <button
       type="button"
-      className="shrink-0 rounded-full p-1.5 text-zinc-700 transition-colors hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+      className="shrink-0 cursor-pointer rounded-full p-1.5 text-zinc-700 transition-colors hover:bg-danger-600/15 hover:text-danger-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
       aria-label={`Delete ${sessionTitle}`}
       disabled={areSessionControlsDisabled || isDeletingSession}
       onClick={(event) => handleDeleteSession(sessionId, event)}
@@ -791,14 +809,14 @@ function ChatPageContent() {
             <h2 className="text-sm font-semibold tracking-wide text-zinc-900">Sessions</h2>
             <button
               type="button"
-              className="rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
+              className="cursor-pointer rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
               onClick={handleCloseMobileSidebar}
             >
               Close
             </button>
             <button
               type="button"
-              className="hidden rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:inline-flex"
+              className="hidden cursor-pointer rounded-full border border-zinc-400/60 px-3 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-300/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:inline-flex"
               onClick={handleCloseSidebar}
             >
               Close
@@ -808,7 +826,7 @@ function ChatPageContent() {
           {isAuthenticated ? (
             <button
               type="button"
-              className="rounded-chat bg-brand-600 px-4 py-3 text-left text-sm font-semibold text-white shadow-chat-card transition hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-200 focus-visible:ring-brand-500"
+              className="cursor-pointer rounded-chat bg-brand-600 px-4 py-3 text-left text-sm font-semibold text-white shadow-chat-card transition hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-200 focus-visible:ring-brand-500"
               onClick={handleNewChat}
             >
               + New chat
@@ -841,10 +859,14 @@ function ChatPageContent() {
                         type="button"
                         aria-label={session.title}
                         className={[
-                          'w-full rounded-chat border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+                          'w-full rounded-chat border p-3',
+                          SESSION_ITEM_BASE,
                           isActive
-                            ? 'border-brand-500/40 bg-white shadow-sm'
-                            : 'border-zinc-300 bg-zinc-100 hover:bg-zinc-50',
+                            ? [
+                                'border-brand-500/40 bg-white shadow-sm',
+                                SESSION_ITEM_ACTIVE_HOVER,
+                              ].join(' ')
+                            : ['border-zinc-300 bg-zinc-100', SESSION_ITEM_HOVER].join(' '),
                         ].join(' ')}
                         onClick={() => handleSelectSession(session.id)}
                         aria-current={isActive ? 'page' : undefined}
@@ -902,11 +924,16 @@ function ChatPageContent() {
                 <ul className="space-y-2" aria-label="Saved chat sessions">
                   {savedSessions.map((session) => (
                     <li key={session.id}>
-                      <div className="flex items-stretch gap-2">
+                      <div className="flex items-start gap-2">
                         <button
                           type="button"
                           aria-label={session.title}
-                          className="min-w-0 flex-1 rounded-chat border border-zinc-300 bg-zinc-100 p-3 text-left transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                          className={[
+                            'min-w-0 flex-1 rounded-chat border border-zinc-300 bg-zinc-100 p-3',
+                            SESSION_ITEM_BASE,
+                            SESSION_ITEM_HOVER,
+                            'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-zinc-300 disabled:hover:bg-zinc-100 disabled:hover:shadow-none',
+                          ].join(' ')}
                           onClick={() => handleSelectSession(session.id)}
                           disabled={!session.isSelectable}
                         >
@@ -956,7 +983,7 @@ function ChatPageContent() {
             <div className="flex min-w-0 items-center gap-2">
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-lg border border-shell-800/20 p-2 text-shell-900 transition hover:bg-shell-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
+                className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-shell-800/20 p-2 text-shell-900 transition hover:bg-shell-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
                 aria-label="Open sidebar"
                 onClick={() => setIsMobileSidebarOpen(true)}
               >
@@ -965,7 +992,7 @@ function ChatPageContent() {
               {isSidebarCollapsed ? (
                 <button
                   type="button"
-                  className="hidden items-center justify-center gap-2 rounded-lg border border-shell-800/20 px-2 py-2 text-sm font-medium text-shell-900 transition hover:bg-shell-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:inline-flex lg:px-3"
+                  className="hidden cursor-pointer items-center justify-center gap-2 rounded-lg border border-shell-800/20 px-2 py-2 text-sm font-medium text-shell-900 transition hover:bg-shell-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 md:inline-flex lg:px-3"
                   aria-label="Expand sidebar"
                   onClick={handleExpandSidebar}
                 >

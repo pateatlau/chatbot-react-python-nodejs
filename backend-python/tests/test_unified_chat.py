@@ -71,8 +71,10 @@ class _CapturingLLMProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
-        del model, temperature
+        del model, temperature, max_tokens
         self.captured_messages.append(list(messages))
         return ProviderCompletion(
             content="Grounded answer references Plain text fixture content.",
@@ -402,15 +404,23 @@ async def test_chat_both_toggles_together(
 
     class _RoutingProvider(FakeProvider):
         async def complete_chat_with_tools(
-            self, messages, model, tools, temperature=0.7
+            self,
+            messages,
+            model,
+            tools,
+            temperature=0.7,
+            *,
+            max_tokens: int | None = None,
         ):
             return await tool_provider.complete_chat_with_tools(
-                messages, model, tools, temperature
+                messages, model, tools, temperature, max_tokens=max_tokens
             )
 
-        async def complete_chat(self, messages, model, temperature=0.7):
+        async def complete_chat(
+            self, messages, model, temperature=0.7, *, max_tokens: int | None = None
+        ):
             return await unified_api_dependencies.complete_chat(
-                messages, model, temperature
+                messages, model, temperature, max_tokens=max_tokens
             )
 
     monkeypatch.setattr(
@@ -877,16 +887,24 @@ async def test_stream_with_documents_and_web_search(
 
     class _RoutingProvider(FakeProvider):
         async def complete_chat_with_tools(
-            self, messages, model, tools, temperature=0.7
+            self,
+            messages,
+            model,
+            tools,
+            temperature=0.7,
+            *,
+            max_tokens: int | None = None,
         ):
             return await tool_provider.complete_chat_with_tools(
-                messages, model, tools, temperature
+                messages, model, tools, temperature, max_tokens=max_tokens
             )
 
-        async def stream_chat(self, messages, model, temperature=0.7):
+        async def stream_chat(
+            self, messages, model, temperature=0.7, *, max_tokens: int | None = None
+        ):
             async for chunk in FakeProvider(
                 response="Combined docs and web search answer"
-            ).stream_chat(messages, model, temperature):
+            ).stream_chat(messages, model, temperature, max_tokens=max_tokens):
                 yield chunk
 
     monkeypatch.setattr(

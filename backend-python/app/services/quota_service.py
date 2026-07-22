@@ -1,13 +1,4 @@
-"""Guest quota enforcement (plan Sections 5.1, 12).
-
-Guests are limited to a configurable number of messages per UTC day. The check
-runs before any provider call; the durable counter is incremented after a
-message is accepted. Authenticated users are not governed by this policy.
-
-``QuotaExceededError`` subclasses ``ChatServiceError`` so it flows through the
-existing error envelope as a first-class ``quota_exceeded`` (429) response
-(plan Section 8.5).
-"""
+"""Guest and authenticated quota enforcement (plan Sections 5.1, 12; V1.1.1 upload quota)."""
 
 from __future__ import annotations
 
@@ -31,6 +22,15 @@ class QuotaExceededError(ChatServiceError):
         )
 
 
+class UploadQuotaExceededError(ChatServiceError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="quota_exceeded",
+            message="Daily document upload quota exceeded for the current window.",
+            status_code=429,
+        )
+
+
 class GuestQuotaStore(Protocol):
     async def get_message_count(
         self, guest_id: uuid.UUID, window_start: datetime.date
@@ -45,15 +45,32 @@ class GuestQuotaStore(Protocol):
     ) -> None: ...
 
 
+class UploadQuotaStore(Protocol):
+    async def get_upload_count(
+        self, user_id: uuid.UUID, window_start: datetime.date
+    ) -> int: ...
+
+    async def increment(
+        self, user_id: uuid.UUID, window_start: datetime.date
+    ) -> None: ...
+
+
 def _utc_window() -> datetime.date:
     return datetime.datetime.now(datetime.timezone.utc).date()
 
 
 class QuotaService:
-    """Check and record guest usage against the daily message quota."""
+    """Check and record guest message usage and authenticated upload volume."""
 
-    def __init__(self, *, store: GuestQuotaStore, settings: Settings) -> None:
+    def __init__(
+        self,
+        *,
+        store: GuestQuotaStore,
+        settings: Settings,
+        upload_store: UploadQuotaStore | None = None,
+    ) -> None:
         self._store = store
+        self._upload_store = upload_store
         self._settings = settings
 
     async def check(self, guest_id: uuid.UUID) -> None:
@@ -76,3 +93,29 @@ class QuotaService:
         """Messages left in the current UTC window (never negative)."""
         count = await self._store.get_message_count(guest_id, _utc_window())
         return max(0, self._settings.guest_daily_message_quota - count)
+
+    async def check_upload(self, user_id: uuid.UUID) -> None:
+        """Raise ``UploadQuotaExceededError`` when daily upload quota is exceeded."""
+        quota = self._settings.effective_authenticated_daily_upload_quota
+        if quota is None or self._upload_store is None:
+            return
+
+        count = await self._upload_store.get_upload_count(user_id, _utc_window())
+        if count >= quota:
+            logger.info(
+                "Upload quota denied",
+                upload_quota_denied_total=True,
+                user_id=str(user_id),
+                count=count,
+                quota=quota,
+            )
+            raise UploadQuotaExceededError()
+
+    async def record_upload(self, user_id: uuid.UUID) -> None:
+        """Increment the authenticated user's upload counter after success."""
+        if (
+            self._settings.effective_authenticated_daily_upload_quota is None
+            or self._upload_store is None
+        ):
+            return
+        await self._upload_store.increment(user_id, _utc_window())

@@ -14,10 +14,19 @@ from starlette.requests import Request
 from app.core.caller import GUEST_TOKEN_HEADER, resolve_guest_caller
 from app.core.config import Settings
 from app.core.security import hash_token
-from app.db.identity import SqlGuestQuotaStore, SqlGuestStore, SqlUserStore
+from app.db.identity import (
+    SqlGuestQuotaStore,
+    SqlGuestStore,
+    SqlUploadQuotaStore,
+    SqlUserStore,
+)
 from app.services.chat_service import ChatServiceError
-from app.services.quota_service import QuotaExceededError, QuotaService
-from tests.fakes import FakeGuestQuotaStore, FakeGuestStore
+from app.services.quota_service import (
+    QuotaExceededError,
+    QuotaService,
+    UploadQuotaExceededError,
+)
+from tests.fakes import FakeGuestQuotaStore, FakeGuestStore, FakeUploadQuotaStore
 
 
 def _request(headers: dict[str, str], client_host: str | None = None) -> Request:
@@ -118,6 +127,36 @@ def test_quota_exceeded_is_first_class_429() -> None:
     assert error.code == "quota_exceeded"
 
 
+@pytest.mark.anyio
+async def test_upload_quota_allows_below_limit() -> None:
+    settings = Settings(authenticated_daily_upload_quota=2)
+    service = QuotaService(
+        store=FakeGuestQuotaStore(),
+        upload_store=FakeUploadQuotaStore(),
+        settings=settings,
+    )
+    await service.check_upload(uuid.uuid4())
+
+
+@pytest.mark.anyio
+async def test_upload_quota_denies_at_limit() -> None:
+    settings = Settings(authenticated_daily_upload_quota=1)
+    upload_store = FakeUploadQuotaStore()
+    service = QuotaService(
+        store=FakeGuestQuotaStore(),
+        upload_store=upload_store,
+        settings=settings,
+    )
+    user_id = uuid.uuid4()
+    await service.record_upload(user_id)
+
+    with pytest.raises(UploadQuotaExceededError) as exc_info:
+        await service.check_upload(user_id)
+
+    assert exc_info.value.code == "quota_exceeded"
+    assert exc_info.value.status_code == 429
+
+
 # --------------------------------------------------------------------------- #
 # Integration against real Postgres (skips when unavailable)                   #
 # --------------------------------------------------------------------------- #
@@ -160,6 +199,25 @@ async def test_sql_quota_counter_upsert_is_atomic(db_session) -> None:
     await quota_store.increment(guest.id, window, tokens=7)
 
     assert await quota_store.get_message_count(guest.id, window) == 2
+
+
+@pytest.mark.anyio
+async def test_sql_upload_quota_counter_upsert_is_atomic(db_session) -> None:
+    user_store = SqlUserStore(db_session)
+    upload_store = SqlUploadQuotaStore(db_session)
+    user = await user_store.create(
+        sub=f"upload-quota-{uuid.uuid4()}",
+        email=None,
+        name=None,
+        picture=None,
+    )
+    window = datetime.datetime.now(datetime.timezone.utc).date()
+
+    assert await upload_store.get_upload_count(user.id, window) == 0
+    await upload_store.increment(user.id, window)
+    await upload_store.increment(user.id, window)
+
+    assert await upload_store.get_upload_count(user.id, window) == 2
 
 
 @pytest.mark.anyio

@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     # anonymous callers. Authenticated users are not governed by this limit.
     guest_daily_message_quota: int = 20
 
+    # V1.1.1 public demo protection (Phase 1): cap guest completion length.
+    guest_max_output_tokens: int = Field(default=4096, ge=1)
+    # Daily document upload count (auth-only upload path). ``None`` disables quota.
+    authenticated_daily_upload_quota: int | None = None
+    # Future-proof if guest upload is ever enabled.
+    guest_daily_upload_quota: int = Field(default=5, ge=1)
+    # When true, tighten demo caps for public deploy (see effective_* helpers).
+    demo_mode_strict: bool = False
+
     # Feature flag (plan Section 13, Phase 5 mitigation): when disabled, chat
     # endpoints behave statelessly (no DB reads/writes), preserving the original
     # request/response contracts exactly.
@@ -112,6 +121,28 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("authenticated_daily_upload_quota", mode="before")
+    @classmethod
+    def normalize_authenticated_daily_upload_quota(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @property
+    def effective_guest_max_output_tokens(self) -> int:
+        """Guest completion cap; ``demo_mode_strict`` lowers to 512 max."""
+        if self.demo_mode_strict:
+            return min(self.guest_max_output_tokens, 512)
+        return self.guest_max_output_tokens
+
+    @property
+    def effective_authenticated_daily_upload_quota(self) -> int | None:
+        """Daily upload cap for signed-in users; strict demo defaults to 20."""
+        if self.demo_mode_strict:
+            configured = self.authenticated_daily_upload_quota
+            return configured if configured is not None else 20
+        return self.authenticated_daily_upload_quota
 
     @property
     def is_development(self) -> bool:

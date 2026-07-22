@@ -250,6 +250,7 @@ class GeminiProvider:
         model: str,
         prompt: str,
         temperature: float,
+        max_tokens: int | None = None,
     ) -> Iterator[Any]:
         # google-genai's type stubs are broad; this wrapper keeps strict
         # type-checkers happy while preserving the SDK call shape.
@@ -258,10 +259,13 @@ class GeminiProvider:
             Callable[..., Iterator[Any]],
             models_api.generate_content_stream,
         )
+        config: dict[str, Any] = {"temperature": temperature}
+        if max_tokens is not None:
+            config["max_output_tokens"] = max_tokens
         return generate_content_stream(
             model=model,
             contents=prompt,
-            config={"temperature": temperature},
+            config=config,
         )
 
     def _generate_content(
@@ -270,16 +274,20 @@ class GeminiProvider:
         model: str,
         prompt: str,
         temperature: float,
+        max_tokens: int | None = None,
     ) -> Any:
         models_api = cast(Any, self._client.models)
         generate_content = cast(
             Callable[..., Any],
             models_api.generate_content,
         )
+        config: dict[str, Any] = {"temperature": temperature}
+        if max_tokens is not None:
+            config["max_output_tokens"] = max_tokens
         return generate_content(
             model=model,
             contents=prompt,
-            config={"temperature": temperature},
+            config=config,
         )
 
     def _generate_content_with_tools(
@@ -290,6 +298,7 @@ class GeminiProvider:
         tools: list[Any],
         system_instruction: str | None,
         temperature: float,
+        max_tokens: int | None = None,
     ) -> Any:
         models_api = cast(Any, self._client.models)
         generate_content = cast(
@@ -301,6 +310,8 @@ class GeminiProvider:
             config["tools"] = tools
         if system_instruction is not None:
             config["system_instruction"] = system_instruction
+        if max_tokens is not None:
+            config["max_output_tokens"] = max_tokens
         return generate_content(
             model=model,
             contents=contents,
@@ -312,12 +323,15 @@ class GeminiProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]:
         prompt = _messages_to_prompt(messages)
         stream = self._generate_content_stream(
             model=model,
             prompt=prompt,
             temperature=temperature,
+            max_tokens=max_tokens,
         )
 
         iterator = iter(stream)
@@ -335,6 +349,8 @@ class GeminiProvider:
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
         prompt = _messages_to_prompt(messages)
         response = await asyncio.to_thread(
@@ -342,6 +358,7 @@ class GeminiProvider:
             model=model,
             prompt=prompt,
             temperature=temperature,
+            max_tokens=max_tokens,
         )
         return ProviderCompletion(
             content=_extract_text(response),
@@ -354,6 +371,8 @@ class GeminiProvider:
         model: str,
         tools: list[dict[str, object]],
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderToolCompletion:
         system_instruction, contents = _to_gemini_contents(messages)
         gemini_tools = _to_gemini_tools(tools)
@@ -364,5 +383,6 @@ class GeminiProvider:
             tools=gemini_tools,
             system_instruction=system_instruction,
             temperature=temperature,
+            max_tokens=max_tokens,
         )
         return _extract_tool_completion(response)

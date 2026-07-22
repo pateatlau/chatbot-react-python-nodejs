@@ -21,6 +21,7 @@ from app.schemas.documents import (
 )
 from app.services.document_service import DocumentServiceError
 from app.services.knowledge_service import KnowledgeService
+from app.services.quota_service import UploadQuotaExceededError
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -86,6 +87,8 @@ async def upload_document(
             ),
             status_code=408,
         ) from exc
+    except UploadQuotaExceededError:
+        raise
     except DocumentServiceError:
         raise
     except Exception as exc:

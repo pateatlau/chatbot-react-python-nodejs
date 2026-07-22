@@ -70,6 +70,8 @@ class LLMProvider(Protocol):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ProviderChunk]: ...
 
     async def complete_chat(
@@ -77,6 +79,8 @@ class LLMProvider(Protocol):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion: ...
 
     async def complete_chat_with_tools(
@@ -85,4 +89,6 @@ class LLMProvider(Protocol):
         model: str,
         tools: list[dict[str, object]],
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderToolCompletion: ...

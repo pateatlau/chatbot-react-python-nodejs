@@ -31,9 +31,9 @@ from app.ai.tools.implementations.web_search import (
 from app.ai.tools.registry import ToolRegistry
 from app.ai.vectorstores.pgvector import PgVectorStore
 from app.core.config import Settings, get_settings
+from app.db.identity import SqlUploadQuotaStore
 from app.db.session import get_db_session
 from app.services.document_service import DocumentService
-from app.services.knowledge_service import KnowledgeService
 
 
 def get_ai_settings(
@@ -107,18 +107,51 @@ def get_vector_store(
     return PgVectorStore(session=session, settings=settings)
 
 
+def get_upload_quota_service(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_ai_settings),
+):
+    """Upload-only quota wiring (guest message counters unused on document routes)."""
+    from app.services.quota_service import QuotaService
+
+    return QuotaService(
+        store=_NoopGuestQuotaStore(),
+        upload_store=SqlUploadQuotaStore(session),
+        settings=settings,
+    )
+
+
+class _NoopGuestQuotaStore:
+    async def get_message_count(self, guest_id: object, window_start: object) -> int:
+        del guest_id, window_start
+        return 0
+
+    async def increment(
+        self,
+        guest_id: object,
+        window_start: object,
+        *,
+        tokens: int = 0,
+    ) -> None:
+        del guest_id, window_start, tokens
+
+
 def get_knowledge_service(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_ai_settings),
     pipeline: IngestionPipeline = Depends(get_ingestion_pipeline_with_embeddings),
     vector_store: PgVectorStore = Depends(get_vector_store),
-) -> KnowledgeService:
+    quota_service=Depends(get_upload_quota_service),
+):
     """Return a request-scoped service for full vector ingest lifecycle."""
+    from app.services.knowledge_service import KnowledgeService
+
     return KnowledgeService(
         session=session,
         settings=settings,
         pipeline=pipeline,
         vector_store=vector_store,
+        quota_service=quota_service,
     )
 
 

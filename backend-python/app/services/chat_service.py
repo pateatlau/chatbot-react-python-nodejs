@@ -39,6 +39,7 @@ from app.schemas.chat import (
     ToolEndFrame,
     ToolStartFrame,
 )
+from app.services.max_tokens import resolve_max_tokens
 from app.services.usage_service import build_usage_record
 
 logger = get_logger(__name__)
@@ -368,9 +369,22 @@ class ChatService:
         provider: LLMProvider,
         request: ChatRequestSchema,
         model: str,
+        *,
+        caller: CallerContext | None = None,
+        provider_name: ProviderName | None = None,
     ) -> ProviderCompletion:
+        max_tokens = resolve_max_tokens(
+            caller,
+            self._settings,
+            provider_name=provider_name,
+        )
         return await asyncio.wait_for(
-            provider.complete_chat(request.messages, model, request.temperature),
+            provider.complete_chat(
+                request.messages,
+                model,
+                request.temperature,
+                max_tokens=max_tokens,
+            ),
             timeout=self._settings.request_timeout_seconds,
         )
 
@@ -381,11 +395,18 @@ class ChatService:
         model: str,
         provider_name: ProviderName,
         *,
+        caller: CallerContext | None = None,
         event: str = "Chat completion",
     ) -> ProviderCompletion:
         start = time.perf_counter()
         try:
-            return await self._complete_with_timeout(provider, request, model)
+            return await self._complete_with_timeout(
+                provider,
+                request,
+                model,
+                caller=caller,
+                provider_name=provider_name,
+            )
         finally:
             latency_ms = int((time.perf_counter() - start) * 1000)
             logger.info(
@@ -715,7 +736,11 @@ class ChatService:
         if not self._persistence_active(caller):
             try:
                 completion = await self._complete_and_log(
-                    provider, request, model, provider_name
+                    provider,
+                    request,
+                    model,
+                    provider_name,
+                    caller=caller,
                 )
             except Exception as exc:  # noqa: BLE001 - normalize provider failures
                 raise normalize_chat_error(exc) from exc
@@ -768,7 +793,11 @@ class ChatService:
 
         try:
             completion = await self._complete_and_log(
-                provider, request, model, provider_name
+                provider,
+                request,
+                model,
+                provider_name,
+                caller=caller,
             )
         except Exception as exc:  # noqa: BLE001 - normalize provider failures
             app_error = normalize_chat_error(exc)
@@ -1011,7 +1040,14 @@ class ChatService:
 
         try:
             provider_stream = provider.stream_chat(
-                request.messages, model, request.temperature
+                request.messages,
+                model,
+                request.temperature,
+                max_tokens=resolve_max_tokens(
+                    caller,
+                    self._settings,
+                    provider_name=provider_name,
+                ),
             ).__aiter__()
             closable_provider_stream = cast(
                 ClosableAsyncIterator | None, provider_stream

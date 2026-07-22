@@ -51,9 +51,13 @@ class RecordingProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
         self.complete_calls += 1
-        return await super().complete_chat(messages, model, temperature)
+        return await super().complete_chat(
+            messages, model, temperature, max_tokens=max_tokens
+        )
 
 
 class BoomProvider(FakeProvider):
@@ -62,7 +66,10 @@ class BoomProvider(FakeProvider):
         messages: list[ChatMessageSchema],
         model: str,
         temperature: float = 0.7,
+        *,
+        max_tokens: int | None = None,
     ) -> ProviderCompletion:
+        del messages, model, temperature, max_tokens
         raise RuntimeError("provider exploded")
 
 

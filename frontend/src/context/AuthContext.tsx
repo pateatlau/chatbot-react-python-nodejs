@@ -10,7 +10,7 @@ import {
 } from '../auth/tokenStorage'
 import type { AuthenticatedUser } from '../types/auth'
 
-export type AuthStatus = 'guest' | 'authenticated'
+export type AuthStatus = 'loading' | 'guest' | 'authenticated'
 
 /** Maps a login failure to user-facing copy (plan Section 5.5). */
 export interface LoginErrorInfo {

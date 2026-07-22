@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { deleteDocument, DocumentsApiError } from '../api/documentsClient'
+import { LoadingIndicator } from './LoadingIndicator'
 import type { DocumentSummary } from '../types/documents'
 
 interface DocumentListProps {
@@ -73,9 +74,7 @@ export function DocumentList({
       ) : null}
 
       {isLoading ? (
-        <p className="mt-4 text-sm text-shell-700" role="status" aria-live="polite">
-          Loading documents…
-        </p>
+        <LoadingIndicator variant="inline" label="Loading documents…" className="mt-4" />
       ) : documents.length === 0 ? (
         <p className="mt-4 text-sm text-shell-700">No documents yet. Upload one to get started.</p>
       ) : (

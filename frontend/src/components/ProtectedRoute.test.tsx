@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProtectedRoute } from './ProtectedRoute'
 import { ChatPage } from '../pages/ChatPage'
 import { DocumentsPage } from '../pages/DocumentsPage'
+import * as AuthContextModule from '../context/AuthContext'
 import { storeSession } from '../auth/tokenStorage'
 import { renderWithProviders } from '../test/renderWithProviders'
 import type { AuthenticatedUser } from '../types/auth'
@@ -87,5 +88,28 @@ describe('ProtectedRoute', () => {
 
     expect(await screen.findByRole('heading', { name: 'Upload document' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Your documents' })).toBeTruthy()
+  })
+
+  it('shows loading shell when auth status is indeterminate', () => {
+    vi.spyOn(AuthContextModule, 'useAuthContext').mockReturnValue({
+      status: 'loading',
+      user: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      loginError: null,
+      clearLoginError: vi.fn(),
+      sessionExpired: false,
+      dismissSessionExpired: vi.fn(),
+      handleInvalidAccessToken: vi.fn(),
+    })
+
+    renderWithProviders(
+      <ProtectedRoute>
+        <div>Protected content</div>
+      </ProtectedRoute>,
+    )
+
+    expect(screen.getByRole('status', { name: /checking sign-in/i })).toBeTruthy()
+    expect(screen.queryByText('Protected content')).toBeNull()
   })
 })

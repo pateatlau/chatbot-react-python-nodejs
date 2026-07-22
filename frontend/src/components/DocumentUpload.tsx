@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { DocumentsApiError, uploadDocument } from '../api/documentsClient'
+import { LoadingIndicator, LoadingSpinner } from './LoadingIndicator'
 
 interface DocumentUploadProps {
   onUploaded: () => void
@@ -82,16 +83,25 @@ export function DocumentUpload({ onUploaded, onInvalidAccessToken }: DocumentUpl
         <button
           type="submit"
           disabled={!selectedFile || isUploading}
-          className="rounded-chat bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-chat-card transition hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-chat bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-chat-card transition hover:bg-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isUploading ? 'Uploading…' : 'Upload'}
+          {isUploading ? (
+            <>
+              <LoadingSpinner className="h-4 w-4 border-white/40 border-t-white" />
+              Uploading…
+            </>
+          ) : (
+            'Upload'
+          )}
         </button>
       </form>
 
       {isUploading ? (
-        <p className="mt-3 text-sm text-shell-700" role="status" aria-live="polite">
-          Processing document on the server…
-        </p>
+        <LoadingIndicator
+          variant="inline"
+          label="Processing document on the server…"
+          className="mt-3"
+        />
       ) : null}
 
       {error ? (

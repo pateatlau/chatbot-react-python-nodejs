@@ -18,6 +18,7 @@ import {
   TrashIcon,
 } from '../components/icons/ShellIcons'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { LoadingIndicator } from '../components/LoadingIndicator'
 import { useAuthContext } from '../context/AuthContext'
 import { ChatProvider, useChatContext } from '../context/ChatContext'
 import { useChatStream } from '../hooks/useChatStream'
@@ -898,13 +899,7 @@ function ChatPageContent() {
               </div>
 
               {isSavedSessionsLoading ? (
-                <div
-                  className="rounded-chat border border-zinc-300 bg-zinc-100 p-3"
-                  aria-live="polite"
-                >
-                  <div className="h-3 w-24 animate-pulse rounded bg-zinc-300" />
-                  <div className="mt-2 h-3 w-full animate-pulse rounded bg-zinc-200" />
-                </div>
+                <LoadingIndicator variant="skeleton" label="Loading saved conversations…" />
               ) : savedSessions.length > 0 ? (
                 <ul className="space-y-2" aria-label="Saved chat sessions">
                   {savedSessions.map((session) => (
@@ -952,7 +947,11 @@ function ChatPageContent() {
 
           {isTranscriptLoading ? (
             <div className="rounded-chat border border-brand-500/20 bg-brand-500/10 p-3">
-              <p className="text-xs text-zinc-800">Loading conversation…</p>
+              <LoadingIndicator
+                variant="inline"
+                label="Loading conversation…"
+                className="text-xs"
+              />
             </div>
           ) : null}
         </div>
@@ -1021,9 +1020,11 @@ function ChatPageContent() {
           className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-2 sm:px-4 sm:pb-4"
         >
           {isTranscriptLoading ? (
-            <div className="px-2 py-3 text-sm text-shell-700" role="status" aria-live="polite">
-              Loading conversation…
-            </div>
+            <LoadingIndicator
+              variant="inline"
+              label="Loading conversation…"
+              className="px-2 py-3"
+            />
           ) : null}
           <MessageList
             messages={state.messages}

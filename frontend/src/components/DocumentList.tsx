@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { deleteDocument, DocumentsApiError } from '../api/documentsClient'
+import { EmptyState } from './EmptyState'
 import { LoadingIndicator } from './LoadingIndicator'
 import type { DocumentSummary } from '../types/documents'
 
@@ -76,7 +77,11 @@ export function DocumentList({
       {isLoading ? (
         <LoadingIndicator variant="inline" label="Loading documents…" className="mt-4" />
       ) : documents.length === 0 ? (
-        <p className="mt-4 text-sm text-shell-700">No documents yet. Upload one to get started.</p>
+        <EmptyState
+          className="mt-4 border-shell-800/20 bg-shell-50/80 [&_h3]:text-shell-950 [&_p]:text-shell-700"
+          title="No documents yet"
+          description="Upload a file above to ground chat answers in your own content."
+        />
       ) : (
         <ul className="mt-4 divide-y divide-shell-800/10" aria-label="Uploaded documents">
           {documents.map((document) => (

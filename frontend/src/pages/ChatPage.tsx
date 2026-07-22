@@ -24,6 +24,7 @@ import { ChatProvider, useChatContext } from '../context/ChatContext'
 import { useChatStream } from '../hooks/useChatStream'
 import { useChatCompletion } from '../hooks/useChatCompletion'
 import { useChatStreamingEnabled } from '../hooks/useChatStreamingEnabled'
+import { EmptyState } from '../components/EmptyState'
 import { MessageList } from '../components/MessageList'
 import { PageBanner } from '../components/PageBanner'
 import { Composer } from '../components/Composer'
@@ -945,14 +946,23 @@ function ChatPageContent() {
                   ))}
                 </ul>
               ) : (
-                <div className="rounded-chat border border-dashed border-zinc-300 bg-zinc-100/80 p-3">
-                  <p className="text-sm font-medium text-zinc-900">No saved conversations yet</p>
-                  <p className="mt-1 text-xs text-zinc-600">
-                    {isAuthenticated
+                <EmptyState
+                  title="No saved conversations yet"
+                  description={
+                    isAuthenticated
                       ? 'Start a new chat to build up your conversation history.'
-                      : 'Sign in to keep multiple conversations and pick up where you left off.'}
-                  </p>
-                </div>
+                      : 'Sign in to keep multiple conversations and pick up where you left off.'
+                  }
+                  action={
+                    isAuthenticated
+                      ? {
+                          label: 'New chat',
+                          onClick: handleNewChat,
+                          disabled: isCreatingSession || areSessionControlsDisabled,
+                        }
+                      : undefined
+                  }
+                />
               )}
             </section>
           </div>
@@ -1044,6 +1054,9 @@ function ChatPageContent() {
             isStreaming={isGenerating}
             showStreamingStatus={chatStreamingEnabled}
             waitingVariant={assistantWaitingVariant}
+            isAuthenticated={isAuthenticated}
+            toolsEnabled={toolsEnabled}
+            ragEnabled={ragEnabled}
           />
           <Composer
             onSend={handleSend}

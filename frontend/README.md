@@ -33,7 +33,7 @@ Streaming chat UI for the Fullstack AI Platform. **MVP complete (2026-07-19)**; 
 - `src/hooks/useChatStreamingEnabled.ts` - reads health flags and provider capabilities
 - `src/context/ChatContext.tsx` - provider + context hook
 - `src/api/sseParser.ts` - buffered SSE frame parser
-- `src/components/` - `MessageList`, `MessageBubble`, `Composer`, `StreamingIndicator`, shared `LoadingIndicator`
+- `src/components/` - `MessageList`, `MessageBubble`, `Composer`, `StreamingIndicator`, shared `LoadingIndicator`, shared `EmptyState`
 - `src/utils/friendlyErrors.ts` - maps provider error codes to user-facing retry copy (Phase 7)
 - `src/index.css` - Tailwind CSS v4 import, theme tokens, and global base layer
 

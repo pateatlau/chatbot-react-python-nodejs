@@ -160,6 +160,24 @@ describe('ChatPage session sidebar wiring', () => {
     expect(screen.getByRole('button', { name: 'New chat' })).not.toBeNull()
   })
 
+  it('shows EmptyState with New chat CTA when authenticated saved session list is empty', async () => {
+    const fetchMock = createRoutedFetchMock((url, method) => {
+      if (url.endsWith('/api/chat/sessions') && method === 'GET') {
+        return jsonResponse([])
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithProviders(<ChatPage />)
+
+    expect(await screen.findByText('No saved conversations yet')).not.toBeNull()
+    expect(
+      screen.getByText('Start a new chat to build up your conversation history.'),
+    ).not.toBeNull()
+    expect(screen.getAllByRole('button', { name: 'New chat' }).length).toBeGreaterThan(0)
+  })
+
   it('clicking the current entry with no active session does not fetch a sentinel session id', async () => {
     // Authenticated with no sessions yet: activeSessionId stays null and the
     // "Current" entry falls back to the local 'unsaved-session' sentinel id.

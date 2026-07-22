@@ -14,6 +14,17 @@ const user: AuthenticatedUser = {
   picture_url: null,
 }
 
+describe('DocumentList empty state', () => {
+  it('shows EmptyState title and upload-oriented copy when there are no documents', () => {
+    render(<DocumentList documents={[]} isLoading={false} onChanged={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'No documents yet' })).toBeTruthy()
+    expect(
+      screen.getByText('Upload a file above to ground chat answers in your own content.'),
+    ).toBeTruthy()
+  })
+})
+
 describe('DocumentList delete', () => {
   beforeEach(() => {
     window.localStorage.clear()

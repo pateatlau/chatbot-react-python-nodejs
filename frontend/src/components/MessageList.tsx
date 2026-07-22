@@ -10,6 +10,9 @@ interface MessageListProps {
   isStreaming?: boolean
   showStreamingStatus?: boolean
   waitingVariant?: StreamingIndicatorVariant
+  isAuthenticated?: boolean
+  toolsEnabled?: boolean
+  ragEnabled?: boolean
 }
 
 const NEAR_BOTTOM_THRESHOLD_PX = 120
@@ -20,7 +23,11 @@ export function MessageList({
   isStreaming = false,
   showStreamingStatus = true,
   waitingVariant = 'typing',
+  isAuthenticated = false,
+  toolsEnabled = false,
+  ragEnabled = false,
 }: MessageListProps) {
+  const showToolHints = isAuthenticated && (toolsEnabled || ragEnabled)
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isNearBottomRef = useRef(true)
@@ -56,13 +63,22 @@ export function MessageList({
     >
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
         {messages.length === 0 && (
-          <div className="mx-auto mt-4 max-w-xl rounded-[1.25rem] border border-zinc-200 bg-zinc-50/90 px-4 py-5 text-center shadow-sm sm:mt-12 sm:rounded-[1.5rem] sm:px-6 sm:py-8">
-            <p className="text-sm font-semibold text-zinc-950 sm:text-base">
+          <div
+            className="mx-auto mt-4 max-w-xl rounded-[1.25rem] border border-zinc-200 bg-zinc-50/90 px-4 py-5 text-center shadow-sm sm:mt-12 sm:rounded-[1.5rem] sm:px-6 sm:py-8"
+            role="status"
+          >
+            <h2 className="text-sm font-semibold text-zinc-950 sm:text-base">
               Start the conversation
-            </p>
+            </h2>
             <p className="mt-1.5 text-xs leading-5 text-zinc-600 sm:mt-2 sm:text-sm sm:leading-6">
               Ask a question, iterate on an idea, or test a prompt to see streaming responses here.
             </p>
+            {showToolHints ? (
+              <ul className="mt-3 space-y-1 text-xs leading-5 text-zinc-500 sm:text-sm">
+                {toolsEnabled ? <li>Turn on Web search for live results.</li> : null}
+                {ragEnabled ? <li>Turn on Documents to ground answers in your uploads.</li> : null}
+              </ul>
+            ) : null}
           </div>
         )}
         {messages.map((message) => (

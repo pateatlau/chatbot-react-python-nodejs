@@ -96,15 +96,11 @@ class DefaultAgent:
                 yield event
             response = await task
             self._log_execution_complete(context, response)
-        except asyncio.CancelledError:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-            raise
-        except Exception:
+        finally:
             if not task.done():
-                await task
-            raise
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     def _create_executor(
         self,

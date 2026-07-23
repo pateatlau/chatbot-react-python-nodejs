@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import logging
 import uuid
 from collections.abc import Iterator
@@ -187,6 +188,53 @@ async def test_default_agent_stream_includes_token_events(
         "".join(event.typed_payload().content for event in token_events)  # type: ignore[union-attr]
         == "Hello from stream."
     )
+
+
+@pytest.mark.anyio
+async def test_default_agent_stream_cleans_up_when_consumer_closes_early(
+    tool_registry: ToolRegistry,
+    prompt_manager,
+    scratchpad_store: ScratchpadStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = asyncio.Event()
+
+    class SlowFinalizeProvider(FakeProvider):
+        async def stream_chat(  # type: ignore[override]
+            self,
+            messages,
+            model,
+            temperature=0.7,
+            *,
+            max_tokens=None,
+        ):
+            await release.wait()
+            async for chunk in super().stream_chat(
+                messages,
+                model,
+                temperature,
+                max_tokens=max_tokens,
+            ):
+                yield chunk
+
+    provider = SlowFinalizeProvider(response="Slow answer.")
+    agent = _agent(
+        provider=provider,
+        tool_registry=tool_registry,
+        prompt_manager=prompt_manager,
+        scratchpad_store=scratchpad_store,
+        monkeypatch=monkeypatch,
+    )
+    context = AgentContext(execution_id="exec-default-early-close")
+
+    async for event in agent.stream(_request(), context):
+        assert event.type == AgentStreamEventType.START
+        break
+
+    release.set()
+    await asyncio.sleep(0)
+
+    assert scratchpad_store.get(context.execution_id) is None
 
 
 @pytest.mark.anyio

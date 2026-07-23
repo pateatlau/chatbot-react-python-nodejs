@@ -23,9 +23,12 @@ class ScratchpadEntry(BaseModel):
     content: str = Field(min_length=1)
     tool_call_id: str | None = None
     metadata: dict[str, object] = Field(default_factory=dict)
+    provider_message: dict[str, object] | None = None
 
     def to_message(self) -> ScratchpadMessage:
         """Convert this entry to a provider-compatible message shape."""
+        if self.provider_message is not None:
+            return self.provider_message
         if self.kind == "tool":
             if self.tool_call_id is None:
                 raise ValueError("tool scratchpad entries require tool_call_id")
@@ -117,6 +120,16 @@ class Scratchpad:
                 content=content,
                 tool_call_id=tool_call_id,
                 metadata=dict(metadata or {}),
+            )
+        )
+
+    def append_provider_message(self, message: dict[str, object]) -> None:
+        """Record a raw provider message (e.g. assistant tool-call turns)."""
+        self.append(
+            ScratchpadEntry(
+                kind="assistant",
+                content=str(message.get("content") or "(tool call)"),
+                provider_message=dict(message),
             )
         )
 

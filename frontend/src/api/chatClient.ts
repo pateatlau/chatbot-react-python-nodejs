@@ -1,8 +1,8 @@
 import { getStoredAccessToken, getStoredGuestToken, storeGuestToken } from '../auth/tokenStorage'
+import { parseErrorEnvelope } from './request'
 import type { ChatRequest, ChatSessionDetail, ChatSessionListItem } from '../types/chat'
 
-const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
+import { API_BASE_URL } from './request'
 
 const GUEST_TOKEN_HEADER = 'X-Guest-Token'
 export const REQUEST_ID_HEADER = 'X-Request-ID'
@@ -75,13 +75,6 @@ export interface ChatResponse {
   tools_used?: string[] | null
 }
 
-interface ErrorResponse {
-  error?: {
-    code?: string
-    message?: string
-  }
-}
-
 export class ChatApiError extends Error {
   status: number
   code?: string
@@ -98,19 +91,8 @@ export async function toChatApiError(
   response: Response,
   fallbackMessage: string,
 ): Promise<ChatApiError> {
-  let payload: ErrorResponse | null
-
-  try {
-    payload = (await response.json()) as ErrorResponse
-  } catch {
-    payload = null
-  }
-
-  return new ChatApiError(
-    payload?.error?.message ?? fallbackMessage,
-    response.status,
-    payload?.error?.code,
-  )
+  const parsed = await parseErrorEnvelope(response, fallbackMessage)
+  return new ChatApiError(parsed.message, parsed.status, parsed.code)
 }
 
 /** Calls the non-streaming `POST /api/chat` fallback endpoint. */

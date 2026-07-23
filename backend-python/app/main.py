@@ -10,13 +10,11 @@ from starlette.types import Message
 from app.ai.deps import get_tool_registry
 from app.ai.tools.registration import register_production_tools
 from app.core.config import get_settings
+from app.core.cors import CORS_EXPOSE_HEADER_NAMES, DEV_ORIGIN_REGEX
 from app.core.errors import error_response, register_exception_handlers
 from app.core.logging import bind_context, get_logger, setup_logging
 from app.db.engine import get_engine
-from app.middleware.correlation_id import (
-    REQUEST_ID_HEADER,
-    correlation_id_middleware,
-)
+from app.middleware.correlation_id import correlation_id_middleware
 from app.middleware.rate_limit import rate_limit_middleware
 from app.routers import auth, chat, documents, health, rag
 
@@ -157,10 +155,11 @@ async def assign_correlation_id(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins_list,
+    allow_origin_regex=DEV_ORIGIN_REGEX.pattern if settings.is_development else None,
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
-    expose_headers=["X-Guest-Token", "X-Guest-Quota-Remaining", REQUEST_ID_HEADER],
+    expose_headers=list(CORS_EXPOSE_HEADER_NAMES),
 )
 
 

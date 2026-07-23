@@ -11,16 +11,16 @@ A full-stack streaming chatbot with Google OAuth, guest sessions, multi-provider
 
 The MVP engineering track is **complete**. The Python backend is the production reference.
 
-| Area | Status |
-| ---- | ------ |
-| Env validation & config | Done |
-| Structured logging (JSON in production) | Done |
-| Correlation IDs (`X-Request-ID`) | Done |
-| Centralized error envelope | Done |
-| HTTP rate limiting (`Retry-After`) | Done |
-| Pyright standard mode + Ruff format/lint | Done |
-| CI quality gates (lint, format, typecheck, coverage ≥ 80%) | Done |
-| Node.js backend alignment | **Deferred** — see `docs/plans/nodejs-backend-v1.md` |
+| Area                                                       | Status                                               |
+| ---------------------------------------------------------- | ---------------------------------------------------- |
+| Env validation & config                                    | Done                                                 |
+| Structured logging (JSON in production)                    | Done                                                 |
+| Correlation IDs (`X-Request-ID`)                           | Done                                                 |
+| Centralized error envelope                                 | Done                                                 |
+| HTTP rate limiting (`Retry-After`)                         | Done                                                 |
+| Pyright standard mode + Ruff format/lint                   | Done                                                 |
+| CI quality gates (lint, format, typecheck, coverage ≥ 80%) | Done                                                 |
+| Node.js backend alignment                                  | **Deferred** — see `docs/plans/nodejs-backend-v1.md` |
 
 Validation record: `docs/plans/mvp-completion-implementation-plan.md` (Phase 9).
 
@@ -28,15 +28,15 @@ Validation record: `docs/plans/mvp-completion-implementation-plan.md` (Phase 9).
 
 Post-MVP V1 engineering is **complete**. The Python backend is the production reference for the reusable AI platform.
 
-| Capability | Status |
-| ---------- | ------ |
-| Centralized prompt management (Jinja2, versioned templates) | Done |
-| Generic tool platform + web search (non-streaming chat path) | Done |
-| Knowledge platform (upload → parse → chunk → embed → pgvector) | Done |
-| Generic RAG Framework (domain-agnostic) | Done |
-| Evaluation CLI (prompt, retrieval, end-to-end) | Done |
-| Document/RAG HTTP API (auth-only) | Done |
-| Frontend `/documents` route (upload, list, delete, RAG ask) | Done |
+| Capability                                                     | Status |
+| -------------------------------------------------------------- | ------ |
+| Centralized prompt management (Jinja2, versioned templates)    | Done   |
+| Generic tool platform + web search (non-streaming chat path)   | Done   |
+| Knowledge platform (upload → parse → chunk → embed → pgvector) | Done   |
+| Generic RAG Framework (domain-agnostic)                        | Done   |
+| Evaluation CLI (prompt, retrieval, end-to-end)                 | Done   |
+| Document/RAG HTTP API (auth-only)                              | Done   |
+| Frontend `/documents` route (upload, list, delete, RAG ask)    | Done   |
 
 **Feature flags** (default off — MVP unchanged when disabled):
 
@@ -56,14 +56,14 @@ Validation record: [docs/plans/post-mvp-v1-implementation-plan.md](docs/plans/po
 
 Post-MVP V1.1 engineering is **complete**. Unified chat on `/` integrates web search and document grounding across all four providers in streaming and non-streaming modes.
 
-| Capability | Status |
-| ---------- | ------ |
-| Multi-provider tool calling (OpenAI, Gemini, Groq, Anthropic) — non-streaming + streaming | Done |
-| Per-request RAG provider/model on chat and `/api/rag/ask` | Done |
-| Unified chat toggles (`use_web_search`, `use_documents`) on main chat | Done |
-| SSE extensions (`retrieval_complete`, `tool_start`, `tool_end`) | Done |
-| Provider capability model on `GET /api/health` | Done |
-| V1 regression when toggles off | Verified |
+| Capability                                                                                | Status   |
+| ----------------------------------------------------------------------------------------- | -------- |
+| Multi-provider tool calling (OpenAI, Gemini, Groq, Anthropic) — non-streaming + streaming | Done     |
+| Per-request RAG provider/model on chat and `/api/rag/ask`                                 | Done     |
+| Unified chat toggles (`use_web_search`, `use_documents`) on main chat                     | Done     |
+| SSE extensions (`retrieval_complete`, `tool_start`, `tool_end`)                           | Done     |
+| Provider capability model on `GET /api/health`                                            | Done     |
+| V1 regression when toggles off                                                            | Verified |
 
 **Sub-tracks:** 1.1a provider parity → 1.1b unified chat (non-streaming) → 1.1c streaming tools + RAG.
 
@@ -77,17 +77,17 @@ Validation record: [docs/plans/post-mvp-v1.1-implementation-plan.md](docs/plans/
 
 Post-MVP V1.1.1 is a **polish release** on top of V1.1 unified chat — production-grade UX and operational safety without new platform capabilities.
 
-| Polish item | Status |
-| ----------- | ------ |
-| Delete chat session (`DELETE /api/chat/sessions/{id}` + UI confirmation + post-delete fallback) | Done |
-| Auto-generate chat titles (~50 chars from first user message) | Done |
-| Protected routes (`/documents` requires sign-in; session expiry redirect + banner on `/`) | Done |
-| Friendly 404 page (catch-all with **Back to Chat** / **Go Home**) | Done |
-| Public demo protection (guest output token cap, upload quota, ops spending-alert docs) | Done |
-| Consistent loading states (`LoadingIndicator` across long operations) | Done |
-| Graceful provider errors (friendly copy; no raw SDK text) | Done |
-| Empty state improvements (`EmptyState` + actionable CTAs) | Done |
-| Mobile responsiveness review (375px / 390px checklist) | Done |
+| Polish item                                                                                     | Status |
+| ----------------------------------------------------------------------------------------------- | ------ |
+| Delete chat session (`DELETE /api/chat/sessions/{id}` + UI confirmation + post-delete fallback) | Done   |
+| Auto-generate chat titles (~50 chars from first user message)                                   | Done   |
+| Protected routes (`/documents` requires sign-in; session expiry redirect + banner on `/`)       | Done   |
+| Friendly 404 page (catch-all with **Back to Chat** / **Go Home**)                               | Done   |
+| Public demo protection (guest output token cap, upload quota, ops spending-alert docs)          | Done   |
+| Consistent loading states (`LoadingIndicator` across long operations)                           | Done   |
+| Graceful provider errors (friendly copy; no raw SDK text)                                       | Done   |
+| Empty state improvements (`EmptyState` + actionable CTAs)                                       | Done   |
+| Mobile responsiveness review (375px / 390px checklist)                                          | Done   |
 
 **Release summary:** [docs/releases/post-mvp-v1.1.1-release-summary.md](docs/releases/post-mvp-v1.1.1-release-summary.md)
 
@@ -184,17 +184,64 @@ flowchart LR
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 20+ (24 works)
 - npm
+- Docker and Docker Compose (local PostgreSQL for the Python backend)
 
 ## Quick Start
 
-### 1) Python Backend
+### 1) One-time setup (Python backend)
 
 ```bash
 cd backend-python
 cp .env.example .env
 # Fill in API keys in .env for the selected provider
 uv sync
-make run
+```
+
+### 2) Start backend (Postgres + API)
+
+First-time setup — start Postgres on `localhost:5433`, then apply migrations (from repository root):
+
+```bash
+./scripts/ensure-postgres.sh
+cd backend-python && make db-migrate
+```
+
+Start the API (ensures Postgres is running, then serves on `http://localhost:8000`):
+
+```bash
+make backend
+```
+
+This checks whether Docker Postgres is accepting connections on `localhost:5433`; if not, it runs `docker compose --profile python up -d postgres` and waits until ready, then starts the Python API on `http://localhost:8000`.
+
+Defaults match `backend-python/.env.example`:
+
+- **Image:** `pgvector/pgvector:pg16`
+- **Host/port:** `localhost:5433` (via `docker-compose.override.yml`; avoids conflict with system Postgres on 5432)
+- **Database:** `chatbot` (user/password: `chatbot` / `chatbot`)
+- **Connection URL:** `postgresql+asyncpg://chatbot:chatbot@localhost:5433/chatbot`
+
+To start Postgres only (without the API):
+
+```bash
+docker compose --profile python up -d postgres
+```
+
+If you already run Postgres locally on another port, install the `vector` extension and point `DATABASE_URL` at that instance instead. For the full stack in containers (frontend + backend + Postgres), see [DOCKER_COMPOSE.md](DOCKER_COMPOSE.md).
+
+If migrations fail on an old Docker volume (for example after switching from `postgres:16-alpine`), reset and retry:
+
+```bash
+docker compose --profile python down -v
+make backend
+# in another shell after Postgres is up:
+cd backend-python && make db-migrate
+```
+
+To run the API without the root helper (Postgres must already be up):
+
+```bash
+cd backend-python && make run
 ```
 
 Important environment note:
@@ -211,7 +258,7 @@ python -c "import groq"            # may fail outside uv env
 uv run python -c "import groq"     # expected to succeed
 ```
 
-### 2) Node Backend (Optional, Post-MVP)
+### 3) Node Backend (Optional, Post-MVP)
 
 ```bash
 cd backend-nodejs
@@ -220,7 +267,7 @@ npm install
 PORT=8001 npm run dev
 ```
 
-### 3) Frontend
+### 4) Frontend
 
 ```bash
 cd frontend
@@ -230,6 +277,8 @@ npm run dev
 ```
 
 Frontend default URL: `http://localhost:5173`
+
+Local dev uses the Vite `/api` proxy (same-origin) so chat requests avoid CORS drift across ports. Set `VITE_API_BASE_URL` only for production/staging builds or when bypassing the proxy.
 
 Frontend highlights:
 
@@ -244,6 +293,8 @@ Node backend recommended local URL: `http://localhost:8001`
 Production backend URL (MVP): `https://fullstack-ai-platform-production.up.railway.app`
 
 Before running locally, make sure the selected backend provider has a real API key in the backend `.env` file you are using.
+
+Keep **`make backend`** (repo root) and **frontend** (`npm run dev`) running in separate terminals. If chat returns **502**, the Vite proxy cannot reach the backend on port 8000 — restart with `make backend`.
 
 ## Cross-Platform Note (Windows)
 
@@ -312,7 +363,7 @@ This repository uses [pre-commit](https://pre-commit.com) to enforce code qualit
 | `frontend/`       | ESLint                                | No (requires fix) | < 2s    |
 | `backend-nodejs/` | Prettier format                       | Yes               | < 1s    |
 | `backend-nodejs/` | ESLint                                | No (requires fix) | < 2s    |
-| `backend-python/` | Ruff check, Ruff format, Pyright | Ruff only   | < 10s   |
+| `backend-python/` | Ruff check, Ruff format, Pyright      | Ruff only         | < 10s   |
 | Shared            | Trailing whitespace, YAML/JSON syntax | Yes               | < 1s    |
 
 **Total typical runtime: < 5 seconds per commit**
@@ -373,7 +424,7 @@ PR CI for `backend-python/` runs `make lint`, `make format-check`, `make typeche
 | `prettier not found`            | Node dependencies missing          | `npm install` in `frontend/` or `backend-nodejs/`     |
 | `eslint not found`              | Node dependencies missing          | `npm install` in `frontend/` or `backend-nodejs/`     |
 | `ruff not found`                | Python dependencies missing        | `uv sync` in `backend-python/`                        |
-| `ruff format` issues           | Python dependencies missing        | `uv sync` in `backend-python/`                        |
+| `ruff format` issues            | Python dependencies missing        | `uv sync` in `backend-python/`                        |
 | `pyright not found`             | Python dependencies missing        | `uv sync` in `backend-python/`                        |
 | Hooks timeout (> 20s)           | Large diff or missing dependencies | Check dependency installation, try smaller commits    |
 | Hooks modify files unexpectedly | Auto-fix hooks reformatting code   | Re-stage auto-fixed files after hook run, then commit |
@@ -610,11 +661,11 @@ Common error codes: `validation_error`, `invalid_google_token`, `quota_exceeded`
 
 ## Tests
 
-| App | Command | Baseline (2026-07-22, Post-MVP V1.1) |
-| --- | ------- | -------------------------------------- |
-| Python | `cd backend-python && make test-cov` | 403 passed, 86.14% coverage on `app/` |
-| Frontend | `cd frontend && npm test -- --run` | 122 passed |
-| Node.js | `cd backend-nodejs && npm test` | 26 passed (baseline, unhardened) |
+| App      | Command                              | Baseline (2026-07-22, Post-MVP V1.1)  |
+| -------- | ------------------------------------ | ------------------------------------- |
+| Python   | `cd backend-python && make test-cov` | 403 passed, 86.14% coverage on `app/` |
+| Frontend | `cd frontend && npm test -- --run`   | 122 passed                            |
+| Node.js  | `cd backend-nodejs && npm test`      | 26 passed (baseline, unhardened)      |
 
 Recommended pre-push validation:
 

@@ -465,3 +465,74 @@ async def test_unified_chat_flag_off_uses_legacy_tool_path(
     assert response.status_code == 200
     assert "Legacy tool path answer." in response.json()["content"]
     assert provider.tool_completion_calls >= 1
+
+
+@pytest.mark.anyio
+async def test_stream_agent_chat_error_persists_when_sse_mapping_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.ai.agent.adapters import chat_stream_adapter as stream_module
+    from app.ai.agent.adapters.chat_stream_adapter import stream_agent_chat
+    from app.ai.agent.models.events import AgentStreamEvent
+    from app.schemas.chat import ChatMessageSchema, ChatRequestSchema
+
+    error_event = AgentStreamEvent.error(
+        "exec-error",
+        code="agent_error",
+        message="Something went wrong.",
+    )
+
+    async def _error_stream(*_args, **_kwargs):
+        yield error_event
+
+    agent = MagicMock()
+    agent.stream = _error_stream
+
+    persist = AsyncMock()
+    chat_service = MagicMock()
+    chat_service._persist_stream_result = persist
+
+    monkeypatch.setattr(
+        stream_module,
+        "sse_frame_from_agent_event",
+        lambda *_args, **_kwargs: None,
+    )
+
+    request = ChatRequestSchema(
+        messages=[ChatMessageSchema(role="user", content="Search for news")],
+        use_web_search=True,
+        provider="openai",
+        model="gpt-4o-mini",
+    )
+    http_request = MagicMock()
+    http_request.is_disconnected = AsyncMock(return_value=False)
+    provider = MagicMock()
+
+    frames = [
+        frame
+        async for frame in stream_agent_chat(
+            agent=agent,
+            chat_service=chat_service,
+            settings=Settings(openai_api_key="test-key", tools_enabled=True),
+            request=request,
+            http_request=http_request,
+            caller=CallerContext.for_user(uuid.uuid4()),
+            prep=None,
+            response_id="resp_error",
+            session_id=None,
+            provider=provider,
+            provider_name="openai",
+            model="gpt-4o-mini",
+            allowed_tool_names=frozenset({WEB_SEARCH_TOOL_NAME}),
+        )
+    ]
+
+    assert any("event: start" in frame for frame in frames)
+    assert any("event: error" in frame for frame in frames)
+    assert "agent_error" in "".join(frames)
+    assert "Something went wrong." in "".join(frames)
+    persist.assert_awaited_once()
+    assert persist.await_args is not None
+    assert persist.await_args.kwargs["status"] == "error"

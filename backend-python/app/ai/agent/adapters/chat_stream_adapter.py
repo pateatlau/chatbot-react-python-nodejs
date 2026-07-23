@@ -12,7 +12,7 @@ from app.ai.agent.adapters.chat_adapter import (
     build_agent_context,
     build_agent_request,
 )
-from app.ai.agent.models.events import AgentStreamEventType
+from app.ai.agent.models.events import AgentStreamEventType, ErrorEventPayload
 from app.ai.agent.runtime.default_agent import DefaultAgent
 from app.ai.agent.streaming.adapter import sse_frame_from_agent_event
 from app.core.caller import CallerContext
@@ -217,17 +217,31 @@ async def stream_agent_chat(
                 mapped = sse_frame_from_agent_event(event, response_id=response_id)
                 if mapped is not None:
                     event_name, frame = mapped
-                    await chat_service._persist_stream_result(
-                        caller=caller,
-                        prep=prep,
-                        provider=provider,
-                        provider_name=provider_name,
-                        model=model,
-                        content="".join(collected),
-                        finish_reason=None,
-                        status="error",
-                    )
-                    yield format_sse(event_name, frame)
+                else:
+                    event_name = "error"
+                    try:
+                        payload = event.typed_payload()
+                        if isinstance(payload, ErrorEventPayload):
+                            code = payload.code
+                            message = payload.message
+                        else:
+                            code = "agent_error"
+                            message = "Agent execution failed."
+                    except Exception:
+                        code = "agent_error"
+                        message = "Agent execution failed."
+                    frame = ErrorFrame(id=response_id, code=code, message=message)
+                await chat_service._persist_stream_result(
+                    caller=caller,
+                    prep=prep,
+                    provider=provider,
+                    provider_name=provider_name,
+                    model=model,
+                    content="".join(collected),
+                    finish_reason=None,
+                    status="error",
+                )
+                yield format_sse(event_name, frame)
                 return
 
     except Exception as exc:  # noqa: BLE001 - normalize provider failures

@@ -195,12 +195,18 @@ cd backend-python
 cp .env.example .env
 # Fill in API keys in .env for the selected provider
 uv sync
-make db-migrate
 ```
 
 ### 2) Start backend (Postgres + API)
 
-From the repository root:
+First-time setup — start Postgres on `localhost:5433`, then apply migrations (from repository root):
+
+```bash
+./scripts/ensure-postgres.sh
+cd backend-python && make db-migrate
+```
+
+Start the API (ensures Postgres is running, then serves on `http://localhost:8000`):
 
 ```bash
 make backend

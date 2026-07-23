@@ -11,8 +11,21 @@ PG_USER="${POSTGRES_USER:-chatbot}"
 PG_DB="${POSTGRES_DB:-chatbot}"
 
 is_postgres_ready() {
-  command -v pg_isready >/dev/null 2>&1 || return 1
-  pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1
+  if command -v pg_isready >/dev/null 2>&1; then
+    pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1 && return 0
+  fi
+
+  local health_status
+  health_status=$(
+    docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{end}}' chatbot-postgres 2>/dev/null ||
+      true
+  )
+  if [[ "$health_status" == "healthy" ]]; then
+    return 0
+  fi
+
+  docker compose --profile python exec -T postgres \
+    pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1
 }
 
 if is_postgres_ready; then

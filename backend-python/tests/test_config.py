@@ -6,7 +6,12 @@ import logging
 
 import pytest
 
-from app.core.config import Settings, _DEFAULT_DATABASE_URL, get_settings
+from app.core.config import (
+    Settings,
+    _DEFAULT_DATABASE_URL,
+    _LEGACY_DEFAULT_DATABASE_URL,
+    get_settings,
+)
 from app.core.logging import get_logger
 
 
@@ -52,14 +57,19 @@ def test_production_rejects_default_jwt_secret() -> None:
         settings.validate_startup()
 
 
-def test_production_rejects_default_database_url() -> None:
+@pytest.mark.parametrize(
+    "database_url",
+    [_DEFAULT_DATABASE_URL, _LEGACY_DEFAULT_DATABASE_URL],
+    ids=["5433", "5432"],
+)
+def test_production_rejects_default_database_url(database_url: str) -> None:
     settings = Settings(
         app_env="production",
         llm_provider="openai",
         openai_api_key="sk-live",
         jwt_secret="production-jwt-secret-with-enough-length",
         google_client_id="1234567890.apps.googleusercontent.com",
-        database_url=_DEFAULT_DATABASE_URL,
+        database_url=database_url,
     )
     with pytest.raises(ValueError, match="DATABASE_URL must be explicitly set"):
         settings.validate_startup()
@@ -105,8 +115,14 @@ def test_request_body_limit_message_uses_configured_limit() -> None:
     assert "8192 byte limit" in settings.request_body_limit_message()
 
 
+@pytest.mark.parametrize(
+    "database_url",
+    [_DEFAULT_DATABASE_URL, _LEGACY_DEFAULT_DATABASE_URL],
+    ids=["5433", "5432"],
+)
 def test_development_warnings_for_insecure_defaults(
     caplog: pytest.LogCaptureFixture,
+    database_url: str,
 ) -> None:
     settings = Settings(
         app_env="development",
@@ -114,7 +130,7 @@ def test_development_warnings_for_insecure_defaults(
         openai_api_key="sk-placeholder",
         jwt_secret="dev-insecure-jwt-secret-change-me",
         google_client_id="",
-        database_url=_DEFAULT_DATABASE_URL,
+        database_url=database_url,
     )
     logger = get_logger("test.config")
     with caplog.at_level(logging.WARNING, logger="test.config"):

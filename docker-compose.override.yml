@@ -1,5 +1,5 @@
-# Local dev: expose Postgres on host port 5433 (avoids conflict with system Postgres on 5432).
+# Local dev: expose Postgres on host POSTGRES_PORT (default 5433; avoids system Postgres on 5432).
 services:
   postgres:
     ports:
-      - '5433:5432'
+      - '${POSTGRES_PORT:-5433}:5432'

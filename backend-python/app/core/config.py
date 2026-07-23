@@ -7,6 +7,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 APP_VERSION = "0.1.0"
 _INSECURE_DEV_JWT_SECRET = "dev-insecure-jwt-secret-change-me"
 _DEFAULT_DATABASE_URL = "postgresql+asyncpg://chatbot:chatbot@localhost:5433/chatbot"
+_LEGACY_DEFAULT_DATABASE_URL = (
+    "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
+)
+_REJECTED_DEFAULT_DATABASE_URLS = frozenset(
+    {_DEFAULT_DATABASE_URL, _LEGACY_DEFAULT_DATABASE_URL}
+)
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
@@ -213,7 +219,7 @@ class Settings(BaseSettings):
                 "JWT_SECRET must be explicitly set when APP_ENV is not 'development'."
             )
 
-        if self.database_url == _DEFAULT_DATABASE_URL:
+        if self.database_url in _REJECTED_DEFAULT_DATABASE_URLS:
             errors.append(
                 "DATABASE_URL must be explicitly set when APP_ENV is not 'development'."
             )
@@ -293,7 +299,7 @@ class Settings(BaseSettings):
                 "auth_not_configured."
             )
 
-        if self.database_url == _DEFAULT_DATABASE_URL:
+        if self.database_url in _REJECTED_DEFAULT_DATABASE_URLS:
             warn(
                 "Using default DATABASE_URL (localhost postgres); ensure postgres "
                 "is running when persistence or auth is used."

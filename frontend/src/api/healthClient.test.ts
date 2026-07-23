@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchHealth } from './healthClient'
 
 describe('healthClient', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+    vi.resetModules()
   })
 
   it('fetchHealth returns chat_streaming_enabled from the server', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    const { fetchHealth } = await import('./healthClient')
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -27,6 +30,6 @@ describe('healthClient', () => {
     expect(health.chat_streaming_enabled).toBe(false)
     expect(health.tools_enabled).toBe(true)
     expect(health.rag_enabled).toBe(true)
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/api/health')
+    expect(fetchMock).toHaveBeenCalledWith('/api/health')
   })
 })

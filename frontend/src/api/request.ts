@@ -1,7 +1,15 @@
 import { getStoredAccessToken } from '../auth/tokenStorage'
 
-export const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000'
+/** Empty string uses same-origin `/api` (Vite dev proxy). Override for production builds. */
+function resolveApiBaseUrl(): string {
+  const configured = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
+  if (configured) {
+    return configured.replace(/\/$/, '')
+  }
+  return ''
+}
+
+export const API_BASE_URL: string = resolveApiBaseUrl()
 
 export const REQUEST_ID_HEADER = 'X-Request-ID'
 
@@ -27,10 +35,23 @@ interface ErrorResponse {
   }
 }
 
+/** Vite dev proxy returns 502 when backend-python is not listening on :8000. */
+export function backendUnavailableMessage(status: number): string | null {
+  if (status === 502 || status === 503 || status === 504) {
+    return 'Cannot reach the backend. From the repo root run: make backend'
+  }
+  return null
+}
+
 export async function parseErrorEnvelope(
   response: Response,
   fallbackMessage: string,
 ): Promise<{ message: string; status: number; code?: string }> {
+  const proxyMessage = backendUnavailableMessage(response.status)
+  if (proxyMessage) {
+    return { message: proxyMessage, status: response.status }
+  }
+
   let payload: ErrorResponse | null
 
   try {

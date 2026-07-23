@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
 _INSECURE_DEV_JWT_SECRET = "dev-insecure-jwt-secret-change-me"
-_DEFAULT_DATABASE_URL = "postgresql+asyncpg://chatbot:chatbot@localhost:5432/chatbot"
+_DEFAULT_DATABASE_URL = "postgresql+asyncpg://chatbot:chatbot@localhost:5433/chatbot"
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 

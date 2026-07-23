@@ -126,8 +126,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-chatbot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatbot}
       POSTGRES_DB: ${POSTGRES_DB:-chatbot}
-    ports:
-      - '5432:5432'
+    # Host port mapping is in docker-compose.override.yml (5433) to avoid clashing
+    # with a local Postgres on 5432. In-container services use postgres:5432.
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:

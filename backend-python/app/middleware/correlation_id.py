@@ -9,6 +9,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.cors import bind_request_origin, reset_request_origin
 from app.core.logging import bind_context, clear_context
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -43,12 +44,14 @@ async def correlation_id_middleware(
 ) -> Response:
     """Assign/propagate ``X-Request-ID`` and bind it into structured log context."""
     request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
-    token = _set_request_id(request_id)
+    request_id_token = _set_request_id(request_id)
+    origin_token = bind_request_origin(request.headers.get("origin"))
     bind_context(request_id=request_id)
     try:
         response = await call_next(request)
         response.headers[REQUEST_ID_HEADER] = request_id
         return response
     finally:
-        _reset_request_id(token)
+        reset_request_origin(origin_token)
+        _reset_request_id(request_id_token)
         clear_context()

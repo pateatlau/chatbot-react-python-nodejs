@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
 from app.core.config import get_settings
+from app.core.cors import apply_cors_headers
 from app.core.logging import get_logger
 from app.core.security import AuthError
 from app.middleware.correlation_id import REQUEST_ID_HEADER, get_request_id
@@ -61,7 +62,7 @@ def error_response(status_code: int, code: str, message: str) -> JSONResponse:
     response = JSONResponse(status_code=status_code, content=payload.model_dump())
     if request_id is not None:
         response.headers[REQUEST_ID_HEADER] = request_id
-    return response
+    return apply_cors_headers(response)
 
 
 def rate_limit_error_response(retry_after_seconds: int) -> JSONResponse:

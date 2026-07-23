@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, _DEFAULT_DATABASE_URL, get_settings
 from app.core.logging import get_logger
 
 
@@ -59,6 +59,7 @@ def test_production_rejects_default_database_url() -> None:
         openai_api_key="sk-live",
         jwt_secret="production-jwt-secret-with-enough-length",
         google_client_id="1234567890.apps.googleusercontent.com",
+        database_url=_DEFAULT_DATABASE_URL,
     )
     with pytest.raises(ValueError, match="DATABASE_URL must be explicitly set"):
         settings.validate_startup()
@@ -113,6 +114,7 @@ def test_development_warnings_for_insecure_defaults(
         openai_api_key="sk-placeholder",
         jwt_secret="dev-insecure-jwt-secret-change-me",
         google_client_id="",
+        database_url=_DEFAULT_DATABASE_URL,
     )
     logger = get_logger("test.config")
     with caplog.at_level(logging.WARNING, logger="test.config"):

@@ -43,15 +43,14 @@ export function backendUnavailableMessage(status: number): string | null {
   return null
 }
 
+function hasApiErrorEnvelope(payload: ErrorResponse | null): boolean {
+  return payload?.error?.code !== undefined || payload?.error?.message !== undefined
+}
+
 export async function parseErrorEnvelope(
   response: Response,
   fallbackMessage: string,
 ): Promise<{ message: string; status: number; code?: string }> {
-  const proxyMessage = backendUnavailableMessage(response.status)
-  if (proxyMessage) {
-    return { message: proxyMessage, status: response.status }
-  }
-
   let payload: ErrorResponse | null
 
   try {
@@ -60,10 +59,22 @@ export async function parseErrorEnvelope(
     payload = null
   }
 
+  if (hasApiErrorEnvelope(payload)) {
+    return {
+      message: payload?.error?.message ?? fallbackMessage,
+      status: response.status,
+      code: payload?.error?.code,
+    }
+  }
+
+  const proxyMessage = backendUnavailableMessage(response.status)
+  if (proxyMessage) {
+    return { message: proxyMessage, status: response.status }
+  }
+
   return {
-    message: payload?.error?.message ?? fallbackMessage,
+    message: fallbackMessage,
     status: response.status,
-    code: payload?.error?.code,
   }
 }
 

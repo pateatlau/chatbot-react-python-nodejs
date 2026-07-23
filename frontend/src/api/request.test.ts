@@ -24,4 +24,31 @@ describe('parseErrorEnvelope', () => {
     expect(result.message).toMatch(/cannot reach the backend/i)
     expect(result.status).toBe(502)
   })
+
+  it('prefers API error envelope over proxy mapping for 503', async () => {
+    const result = await parseErrorEnvelope(
+      new Response(
+        JSON.stringify({ error: { code: 'feature_disabled', message: 'RAG disabled' } }),
+        {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+      'Request failed: 503',
+    )
+
+    expect(result.code).toBe('feature_disabled')
+    expect(result.message).toBe('RAG disabled')
+    expect(result.status).toBe(503)
+  })
+
+  it('falls back to proxy guidance for 503 without an API envelope', async () => {
+    const result = await parseErrorEnvelope(
+      new Response(null, { status: 503 }),
+      'Request failed: 503',
+    )
+
+    expect(result.message).toMatch(/cannot reach the backend/i)
+    expect(result.code).toBeUndefined()
+  })
 })

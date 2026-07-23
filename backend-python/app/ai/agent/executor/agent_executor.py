@@ -24,7 +24,10 @@ from app.ai.agent.scratchpad.store import ScratchpadStore, get_scratchpad_store
 from app.ai.agent.state.manager import AgentStateManager
 from app.ai.agent.streaming.publisher import NoOpStreamPublisher
 from app.ai.tools.schemas import ToolCall, ToolExecutionContext, ToolResult
+from app.core.logging import get_logger
 from app.providers.base import LLMProvider
+
+_logger = get_logger(__name__)
 
 
 class AgentExecutor:
@@ -54,19 +57,20 @@ class AgentExecutor:
     ) -> AgentResponse:
         """Execute the full ReAct loop until finalize or iteration limit."""
         config = request.config or AgentConfig()
-        state = AgentStateManager.create_initial_state(
-            context,
-            config,
-            scratchpad_store=self._scratchpad_store,
-        )
-        scratchpad = self._scratchpad_store.require(context.execution_id)
-        if len(scratchpad) == 0:
-            scratchpad.extend_messages(request.messages)
-
-        await self._publisher.publish(AgentStreamEvent.start(context.execution_id))
         last_planner_content: str | None = None
 
         try:
+            state = AgentStateManager.create_initial_state(
+                context,
+                config,
+                scratchpad_store=self._scratchpad_store,
+            )
+            scratchpad = self._scratchpad_store.require(context.execution_id)
+            if len(scratchpad) == 0:
+                scratchpad.extend_messages(request.messages)
+
+            await self._publisher.publish(AgentStreamEvent.start(context.execution_id))
+
             state = AgentStateManager.transition(state, AgentExecutionStatus.PLANNING)
 
             while state.has_remaining_iterations():
@@ -131,21 +135,25 @@ class AgentExecutor:
                 scratchpad=scratchpad,
                 last_planner_content=last_planner_content,
             )
-        except AgentError:
-            await self._publisher.publish(
-                AgentStreamEvent.error(
-                    context.execution_id,
-                    code="agent_error",
-                    message="Agent execution failed.",
-                )
-            )
-            raise
-        except Exception as exc:
+        except AgentError as exc:
             await self._publisher.publish(
                 AgentStreamEvent.error(
                     context.execution_id,
                     code="agent_error",
                     message=str(exc),
+                )
+            )
+            raise
+        except Exception:
+            _logger.exception(
+                "Agent execution failed",
+                execution_id=context.execution_id,
+            )
+            await self._publisher.publish(
+                AgentStreamEvent.error(
+                    context.execution_id,
+                    code="agent_error",
+                    message="Agent execution failed.",
                 )
             )
             raise

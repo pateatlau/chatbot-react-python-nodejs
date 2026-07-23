@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
+from app.ai.agent.exceptions import AgentTimeoutError
 from app.ai.agent.interfaces.streaming import StreamPublisher
 from app.ai.agent.models.config import AgentConfig
 from app.ai.agent.models.events import AgentStreamEvent
 from app.ai.agent.models.messages import AgentMessage
 from app.ai.agent.models.request import AgentRequest
 from app.ai.agent.retry import llm_retry_policy_from_config, retry_operation
-from app.ai.agent.scratchpad.scratchpad import Scratchpad
-from app.providers.base import LLMProvider, ProviderCompletion
+from app.ai.agent.scratchpad.scratchpad import Scratchpad, ScratchpadMessage
+from app.providers.base import LLMProvider, ProviderChunk, ProviderCompletion
 
 
 async def stream_final_answer(
@@ -25,6 +27,7 @@ async def stream_final_answer(
 ) -> str:
     """Generate and stream the final answer via the provider."""
     messages = _scratchpad_to_chat_messages(scratchpad)
+    config = request.config or AgentConfig()
     content_parts: list[str] = []
     stream = provider.stream_chat(
         cast(Any, messages),
@@ -32,11 +35,19 @@ async def stream_final_answer(
         request.temperature,
         max_tokens=request.max_tokens,
     )
-    async for chunk in stream:
-        token = chunk.get("content") or ""
-        if token:
-            await publisher.publish(AgentStreamEvent.token(execution_id, content=token))
-            content_parts.append(token)
+    try:
+        async for chunk in _iter_stream_with_timeout(
+            stream,
+            timeout_seconds=config.timeout_seconds,
+        ):
+            token = chunk.get("content") or ""
+            if token:
+                await publisher.publish(
+                    AgentStreamEvent.token(execution_id, content=token)
+                )
+                content_parts.append(token)
+    finally:
+        await _aclose_stream(stream)
     return "".join(content_parts)
 
 
@@ -81,11 +92,46 @@ async def complete_llm_step(
     return await retry_operation(operation, policy)
 
 
-def _scratchpad_to_chat_messages(scratchpad: Scratchpad) -> list[AgentMessage]:
-    """Convert scratchpad conversational entries for provider chat calls."""
-    messages: list[AgentMessage] = []
+async def _iter_stream_with_timeout(
+    stream: AsyncIterator[ProviderChunk],
+    *,
+    timeout_seconds: int | None,
+) -> AsyncIterator[ProviderChunk]:
+    """Yield stream chunks, enforcing a total budget including stalls between chunks."""
+    if timeout_seconds is None:
+        async for chunk in stream:
+            yield chunk
+        return
+
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    iterator = stream.__aiter__()
+    while True:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise AgentTimeoutError(timeout_seconds)
+        try:
+            chunk = await asyncio.wait_for(iterator.__anext__(), timeout=remaining)
+        except StopAsyncIteration:
+            break
+        except TimeoutError as exc:
+            raise AgentTimeoutError(timeout_seconds) from exc
+        yield chunk
+
+
+async def _aclose_stream(stream: AsyncIterator[ProviderChunk]) -> None:
+    """Best-effort async generator cleanup after normal completion or timeout."""
+    aclose = getattr(stream, "aclose", None)
+    if aclose is not None:
+        await aclose()
+
+
+def _scratchpad_to_chat_messages(scratchpad: Scratchpad) -> list[ScratchpadMessage]:
+    """Convert scratchpad entries for provider chat calls."""
+    messages: list[ScratchpadMessage] = []
     for message in scratchpad.to_message_context():
         if isinstance(message, AgentMessage):
             if message.role in ("system", "user", "assistant"):
                 messages.append(message)
+            continue
+        messages.append(message)
     return messages

@@ -22,7 +22,8 @@ from app.ai.agent.models.messages import AgentMessage
 from app.ai.agent.models.plan import ExecutionPlan, PlannedStep
 from app.ai.agent.models.request import AgentRequest
 from app.ai.agent.planner import ReActPlanner
-from app.ai.agent.scratchpad import ScratchpadStore
+from app.ai.agent.scratchpad import Scratchpad, ScratchpadStore
+from app.ai.agent.executor.llm_step import stream_final_answer
 from app.ai.agent.streaming import InMemoryStreamPublisher
 from app.ai.prompts.manager import create_prompt_manager
 from app.ai.tools.executor import ToolExecutor
@@ -521,6 +522,81 @@ async def test_agent_executor_execute_step_llm(
     assert completion.content == "Intermediate LLM output."
     scratchpad = scratchpad_store.require(context.execution_id)
     assert scratchpad.entries[-1].content == "Intermediate LLM output."
+
+
+@pytest.mark.anyio
+async def test_stream_final_answer_preserves_tool_round_messages_for_provider() -> None:
+    """After a tool round, the provider must receive tool-call and tool-result turns."""
+    scratchpad = Scratchpad("exec-tool-context")
+    scratchpad.extend_messages([AgentMessage(role="user", content="Echo hi")])
+    scratchpad.append_provider_message(
+        {
+            "role": "assistant",
+            "content": "Echoing.",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {
+                        "name": "echo",
+                        "arguments": '{"message":"hi"}',
+                    },
+                }
+            ],
+        }
+    )
+    scratchpad.append_tool_result(
+        tool_call_id="call-1",
+        content='{"success": true, "data": {"echo": "hi"}}',
+    )
+    captured_messages: list[object] = []
+
+    class CapturingProvider(FakeProvider):
+        async def stream_chat(  # type: ignore[override]
+            self,
+            messages,
+            model,
+            temperature=0.7,
+            *,
+            max_tokens=None,
+        ):
+            captured_messages.extend(messages)
+            async for chunk in super().stream_chat(
+                messages,
+                model,
+                temperature,
+                max_tokens=max_tokens,
+            ):
+                yield chunk
+
+    provider = CapturingProvider(response="Done after tools.")
+    publisher = InMemoryStreamPublisher()
+    request = AgentRequest(
+        messages=[AgentMessage(role="user", content="Echo hi")],
+        model="gpt-4o-mini",
+    )
+
+    content = await stream_final_answer(
+        provider,
+        request=request,
+        scratchpad=scratchpad,
+        execution_id="exec-tool-context",
+        publisher=publisher,
+    )
+
+    assert content == "Done after tools."
+    tool_call_message = next(
+        message
+        for message in captured_messages
+        if isinstance(message, dict) and message.get("role") == "assistant"
+    )
+    tool_result_message = next(
+        message
+        for message in captured_messages
+        if isinstance(message, dict) and message.get("role") == "tool"
+    )
+    assert tool_call_message.get("tool_calls")
+    assert tool_result_message.get("tool_call_id") == "call-1"
 
 
 def test_executor_modules_have_no_transport_or_domain_imports() -> None:

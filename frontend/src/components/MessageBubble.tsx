@@ -1,4 +1,5 @@
 import type { Message } from '../types/chat'
+import { MessageContent } from './MessageContent'
 import { StreamingIndicator, type StreamingIndicatorVariant } from './StreamingIndicator'
 
 interface MessageBubbleProps {
@@ -52,9 +53,10 @@ export function MessageBubble({
         <StreamingIndicator variant={waitingVariant} />
       ) : (
         <div className="max-w-full overflow-x-auto">
-          <p className="text-sm leading-7 whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {message.content}
-          </p>
+          <MessageContent
+            content={message.content}
+            markdown={message.role === 'assistant' && message.status === 'complete'}
+          />
         </div>
       )}
 

@@ -53,7 +53,10 @@ export function MessageBubble({
         <StreamingIndicator variant={waitingVariant} />
       ) : (
         <div className="max-w-full overflow-x-auto">
-          <MessageContent content={message.content} markdown={message.role === 'assistant'} />
+          <MessageContent
+            content={message.content}
+            markdown={message.role === 'assistant' && message.status === 'complete'}
+          />
         </div>
       )}
 

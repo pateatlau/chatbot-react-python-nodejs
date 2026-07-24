@@ -45,4 +45,29 @@ describe('MessageContent', () => {
     const link = screen.getByRole('link', { name: 'https://example.com/article' })
     expect(link.getAttribute('href')).toBe('https://example.com/article')
   })
+
+  it('blocks images and unsupported GFM elements while keeping surrounding text', () => {
+    const { container } = render(
+      <MessageContent
+        markdown
+        content={[
+          'Before',
+          '![logo](https://example.com/logo.png)',
+          '| a | b |',
+          '| - | - |',
+          '| 1 | 2 |',
+          '~~struck~~ and - [ ] task',
+          'After',
+        ].join('\n\n')}
+      />,
+    )
+
+    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector('table')).toBeNull()
+    expect(container.querySelector('del')).toBeNull()
+    expect(container.querySelector('input')).toBeNull()
+    expect(screen.getByText(/Before/)).toBeTruthy()
+    expect(screen.getByText(/After/)).toBeTruthy()
+    expect(screen.getByText(/struck/)).toBeTruthy()
+  })
 })

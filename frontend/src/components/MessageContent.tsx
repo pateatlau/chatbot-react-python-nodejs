@@ -9,6 +9,20 @@ interface MessageContentProps {
   markdown?: boolean
 }
 
+/** Elements with custom handlers, plus soft-break `<br>` from remark-breaks. */
+const ALLOWED_MARKDOWN_ELEMENTS = [
+  'a',
+  'p',
+  'strong',
+  'em',
+  'ul',
+  'ol',
+  'li',
+  'code',
+  'pre',
+  'br',
+] as const
+
 const markdownComponents: Components = {
   a: ({ href, children }) => (
     <a
@@ -53,7 +67,12 @@ export function MessageContent({ content, markdown = false }: MessageContentProp
 
   return (
     <div className="text-sm leading-7 [overflow-wrap:anywhere]">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={markdownComponents}
+        allowedElements={[...ALLOWED_MARKDOWN_ELEMENTS]}
+        unwrapDisallowed
+      >
         {content}
       </ReactMarkdown>
     </div>

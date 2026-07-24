@@ -114,6 +114,27 @@ kill -9 <PID>
 docker compose down -v
 ```
 
+**Do not** run the compose backend on `:8000` at the same time as `make backend`.
+Docker binds `*:8000` (IPv6-reachable via `localhost`) while local uvicorn binds
+`127.0.0.1:8000`. Vite proxies to `127.0.0.1`, but any client using `localhost:8000`
+can hit the compose container — often without `GOOGLE_CLIENT_ID` → Google login
+returns **503** `auth_not_configured`. Stop the compose API when using host uvicorn:
+
+```bash
+docker compose --profile python stop backend-python
+```
+
+### Google login returns 503 auth_not_configured
+
+Set the same public OAuth Web client ID in root `.env` (copied from `.env.compose`)
+as in `backend-python/.env` / `frontend/.env`:
+
+```bash
+GOOGLE_CLIENT_ID=your-id.apps.googleusercontent.com
+```
+
+Then recreate the compose backend so the env is applied.
+
 ### Frontend Can't Reach Backend
 
 Check CORS configuration:

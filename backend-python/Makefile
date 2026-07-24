@@ -2,8 +2,10 @@ UV := uv
 
 .PHONY: run lint typecheck format format-check test test-cov eval db-migrate db-revision db-reset db-seed
 
+# Bind IPv4 loopback explicitly so local Vite (proxy → 127.0.0.1:8000) cannot
+# race a Docker-published *:8000 that "localhost" may resolve to via IPv6.
 run:
-	$(UV) run python -m uvicorn app.main:app --reload --port 8000
+	$(UV) run python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 lint:
 	$(UV) run python -m ruff check app tests

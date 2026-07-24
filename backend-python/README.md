@@ -837,12 +837,17 @@ secret.
 Authorized JavaScript origins must exactly match each frontend origin (scheme + host, no
 path, no trailing slash), one-to-one with `CORS_ALLOWED_ORIGINS`:
 
-- Local: `http://localhost:5173`
+- Local: `http://localhost:5173` and `http://127.0.0.1:5173` (add both; browsers treat them as different origins)
 - Staging: the exact staging Vercel frontend origin (see [CD_STAGING.md](../CD_STAGING.md)) — pending real hostname
 - Production: the exact production Vercel frontend origin (see [CD_PRODUCTION.md](../CD_PRODUCTION.md)) — pending real hostname
 
 Authorized redirect URIs are not required for the Google Identity Services ID-token flow
 used by this app.
+
+**Local Vite + host uvicorn:** the frontend proxies `/api` to `http://127.0.0.1:8000`
+(not `localhost`) so traffic cannot accidentally hit a Docker Compose backend that also
+publishes `:8000` on IPv6. Do not run compose `backend-python` and `make backend` on
+port 8000 at the same time — see root [README.md](../README.md) “Google login on localhost”.
 
 Full per-environment env var contract (Railway `GOOGLE_CLIENT_ID`/`APP_ENV`/`JWT_SECRET`,
 Vercel `VITE_GOOGLE_CLIENT_ID`, and the matching Google Cloud origin) lives in the
